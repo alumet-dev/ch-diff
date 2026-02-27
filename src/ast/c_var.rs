@@ -2,7 +2,7 @@ use clang::{Entity, EntityKind};
 
 use crate::ast::c_type::CType;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CVar {
     pub typ: CType,
     pub is_invalid: bool,

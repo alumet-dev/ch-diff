@@ -1,18 +1,19 @@
 use clang::{Entity, EntityKind};
-use indexmap::IndexMap;
 
 use crate::ast::c_type::CType;
 
 #[derive(Debug)]
 pub struct CFunction {
-    pub arguments: IndexMap<String, FunctionArg>,
+    // by position in the argument list
+    pub arguments: Vec<FunctionArg>,
     pub return_type: CType,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunctionArg {
     pub name: String,
     pub typ: CType,
+    pub pos: usize,
 }
 
 impl CFunction {
@@ -23,11 +24,15 @@ impl CFunction {
             .get_arguments()
             .unwrap()
             .into_iter()
-            .map(|arg| {
+            .enumerate()
+            .map(|(position, arg)| {
                 let name = arg.get_name().unwrap_or_default();
                 let typ = arg.get_type().unwrap().try_into().unwrap();
-                let arg = FunctionArg { name, typ };
-                (arg.name.clone(), arg)
+                FunctionArg {
+                    name,
+                    typ,
+                    pos: position,
+                }
             })
             .collect();
         Ok(Self {

@@ -1,16 +1,19 @@
+use std::collections::BTreeMap;
+
 use anyhow::anyhow;
 use clang::{Entity, EntityKind};
-use indexmap::IndexMap;
+
+use crate::ast::c_type::CType;
 
 #[derive(Debug)]
 pub struct CStruct {
     pub size: usize,
-    pub fields: IndexMap<String, super::Node<StructField>>,
+    // store the field by offset: renaming a field is not a breaking change
+    pub fields: BTreeMap<usize, super::Node<StructField>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructField {
-    pub size: usize,
     pub offset: usize,
 
     /// If this is a bit-field, its number of bits.
@@ -24,6 +27,8 @@ pub struct StructField {
     /// ```
     /// See https://en.cppreference.com/w/c/language/bit_field.html
     pub bit_field_width: Option<usize>,
+
+    pub typ: CType,
 }
 
 impl CStruct {
@@ -50,18 +55,18 @@ impl CStruct {
                 // we have a field declaration
                 let name = item.get_name().unwrap_or_default();
                 let offset = struct_type.get_offsetof(&name).unwrap();
-                let size = item.get_type().unwrap().get_sizeof().unwrap();
+                let typ = item.get_type().unwrap().try_into().unwrap();
 
                 // it may be a bit-field
                 let bit_field_width = item.get_bit_field_width();
 
                 let field = StructField {
-                    size,
                     offset,
                     bit_field_width,
+                    typ,
                 };
                 let field = super::Node::from_entity(field, &item);
-                Some((name, field))
+                Some((offset, field))
             })
             .collect();
 

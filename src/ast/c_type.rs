@@ -3,7 +3,7 @@ use clang::{Entity, Type, TypeKind};
 
 /// A simplified enum for c types.
 /// See https://en.cppreference.com/w/c/language/type.html.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CType {
     Basic(BasicType),
     Enum(EnumeratedType),
@@ -14,29 +14,31 @@ pub enum CType {
     /// Typedef alias.
     Typedef(Box<AliasType>),
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BasicType(pub TypeKind);
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct EnumeratedType {
     pub enum_name: String,
     pub underlying_type: BasicType,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ArrayType {
     pub element_type: CType,
     pub size: Option<usize>,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NamedRecordType {
     pub name: String,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PointerType {
     pub pointee: CType,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AliasType {
+    /// The name of the typedef alias.
     pub alias: String,
+    /// The canonical underlying type.
     pub underlying: CType,
 }
 
@@ -90,5 +92,28 @@ impl AliasType {
         }
         let underlying = underlying.try_into()?;
         Ok(Self { alias, underlying })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CTypeComparison {
+    Same,
+    /// Ex: different typedefs that resolve to the same underlying type.
+    Equivalent,
+    Different,
+}
+
+impl CType {
+    pub fn compare(&self, other: &CType) -> CTypeComparison {
+        match (self, other) {
+            (a, b) if a == b => CTypeComparison::Same,
+            (CType::Enum(a), CType::Enum(b)) if a.underlying_type == b.underlying_type => {
+                CTypeComparison::Equivalent
+            }
+            (CType::Typedef(a), CType::Typedef(b)) if a.underlying == b.underlying => {
+                CTypeComparison::Equivalent
+            }
+            _ => CTypeComparison::Different,
+        }
     }
 }

@@ -14,7 +14,7 @@ pub mod c_struct;
 pub mod c_type;
 pub mod c_var;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Node<V> {
     pub name: String,
     pub comment: String,
