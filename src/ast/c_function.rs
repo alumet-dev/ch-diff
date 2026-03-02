@@ -9,7 +9,7 @@ pub struct CFunction {
     pub return_type: CType,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FunctionArg {
     pub name: String,
     pub typ: CType,

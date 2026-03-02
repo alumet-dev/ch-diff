@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use clang::{Entity, EntityKind, TypeKind};
 use indexmap::IndexMap;
 
-use crate::ast::c_type::{BasicType, CType};
+use crate::ast::c_type::{BasicType, CType, SimplifiedTypeKind};
 
 #[derive(Debug, Clone)]
 pub struct CEnum {
@@ -37,13 +37,20 @@ impl CEnum {
                     return None;
                 }
 
-                let value = item.get_enum_constant_value().unwrap();
-                let value = match &underlying_type {
-                    CType::Basic(BasicType(
+                let (v_signed, v_unsigned) = item.get_enum_constant_value().unwrap();
+                let value = match &underlying_type.kind {
+                    SimplifiedTypeKind::Basic(BasicType(
                         TypeKind::UShort | TypeKind::UInt | TypeKind::ULong,
-                    )) => Value::Unsigned(value.1),
-                    CType::Basic(BasicType(TypeKind::Short | TypeKind::Int | TypeKind::Long)) => {
-                        Value::Signed(value.0)
+                    )) => Value::Unsigned(v_unsigned),
+                    SimplifiedTypeKind::Basic(BasicType(
+                        TypeKind::Short | TypeKind::Int | TypeKind::Long,
+                    )) => Value::Signed(v_signed),
+                    SimplifiedTypeKind::StandardInt(i) => {
+                        if i.is_signed() {
+                            Value::Signed(v_signed)
+                        } else {
+                            Value::Unsigned(v_unsigned)
+                        }
                     }
                     ty => panic!("unexpected type for enum value: {ty:?}"),
                 };

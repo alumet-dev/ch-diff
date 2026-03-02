@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub struct GlobalVarDiff {
-    changes: ChangeBuf<VarChange>,
+    pub changes: ChangeBuf<VarChange>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,5 +68,17 @@ impl GlobalVarDiff {
         }
 
         Ok(Self { changes })
+    }
+
+    pub fn len(&self) -> usize {
+        self.changes.changes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.changes.changes.is_empty()
+    }
+
+    pub fn compatibility(&self) -> ChangeKind {
+        self.changes.compatibility
     }
 }

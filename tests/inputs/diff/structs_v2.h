@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <stdint.h>
 
 typedef struct {
@@ -9,4 +8,12 @@ typedef struct {
 
 struct params {
   uint64_t array[5]; // changed
+};
+
+struct same {
+  uint16_t* chr;
+};
+
+struct renamed {
+  uint16_t *rch;
 };

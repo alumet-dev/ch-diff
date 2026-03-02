@@ -1,17 +1,19 @@
 //! Simplified AST.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
-use clang::{Entity, EntityKind, TranslationUnit};
+use clang::{Clang, Entity, EntityKind, Index, TranslationUnit};
 
 use crate::ast::{
-    c_enum::CEnum, c_function::CFunction, c_struct::CStruct, c_type::AliasType, c_var::CVar,
+    c_enum::CEnum, c_function::CFunction, c_struct::CStruct, c_type::AliasType, c_union::CUnion,
+    c_var::CVar,
 };
 
 pub mod c_enum;
 pub mod c_function;
 pub mod c_struct;
 pub mod c_type;
+pub mod c_union;
 pub mod c_var;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,6 +40,7 @@ pub struct HeaderContent {
     pub global_variables: BTreeMap<String, Node<CVar>>,
     pub typedefs: BTreeMap<String, Node<AliasType>>,
     pub structs: BTreeMap<String, Node<CStruct>>,
+    pub unions: BTreeMap<String, Node<CUnion>>,
     pub enums: BTreeMap<String, Node<CEnum>>,
     pub functions: BTreeMap<String, Node<CFunction>>,
 }
@@ -65,6 +68,11 @@ impl HeaderContent {
                     let s = CStruct::try_from_clang(item)?;
                     let node = Node::from_entity(s, &item);
                     content.structs.insert(node.name.clone(), node);
+                }
+                EntityKind::UnionDecl => {
+                    let s = CUnion::try_from_clang(item)?;
+                    let node = Node::from_entity(s, &item);
+                    content.unions.insert(node.name.clone(), node);
                 }
                 EntityKind::EnumDecl => {
                     let e = CEnum::try_from_clang(item)?;

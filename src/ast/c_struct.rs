@@ -1,18 +1,18 @@
 use std::collections::BTreeMap;
 
-use anyhow::anyhow;
-use clang::{Entity, EntityKind};
+use anyhow::{Context, anyhow};
+use clang::{Entity, EntityKind, Type};
 
 use crate::ast::c_type::CType;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct CStruct {
     pub size: usize,
     // store the field by offset: renaming a field is not a breaking change
     pub fields: BTreeMap<usize, super::Node<StructField>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructField {
     pub offset: usize,
 
@@ -44,32 +44,43 @@ impl CStruct {
         let struct_type = e.get_type().unwrap();
         let size = struct_type.get_sizeof().unwrap();
 
-        let fields = e
-            .get_children()
-            .into_iter()
-            .filter_map(|item| {
-                if item.get_kind() != EntityKind::FieldDecl {
-                    return None;
-                }
+        let children = e.get_children();
+        let mut fields = BTreeMap::new();
+        for child in children {
+            if child.get_kind() != EntityKind::FieldDecl {
+                continue;
+            }
 
-                // we have a field declaration
-                let name = item.get_name().unwrap_or_default();
-                let offset = struct_type.get_offsetof(&name).unwrap();
-                let typ = item.get_type().unwrap().try_into().unwrap();
-
-                // it may be a bit-field
-                let bit_field_width = item.get_bit_field_width();
-
-                let field = StructField {
-                    offset,
-                    bit_field_width,
-                    typ,
-                };
-                let field = super::Node::from_entity(field, &item);
-                Some((offset, field))
-            })
-            .collect();
+            let field = StructField::try_from_clang(child, struct_type).with_context(|| {
+                format!(
+                    "failed to parse struct field {:?} in {}",
+                    child.get_name(),
+                    struct_type.get_display_name()
+                )
+            })?;
+            fields.insert(field.offset, super::Node::from_entity(field, &child));
+        }
 
         Ok(Self { size, fields })
+    }
+}
+
+impl StructField {
+    pub fn try_from_clang<'a>(item: Entity<'a>, record_type: Type<'a>) -> anyhow::Result<Self> {
+        assert!(item.get_kind() == EntityKind::FieldDecl);
+
+        // we have a field declaration
+        let name = item.get_name().unwrap_or_default();
+        let offset = record_type.get_offsetof(&name).unwrap();
+        let typ = item.get_type().unwrap().try_into().unwrap();
+
+        // it may be a bit-field
+        let bit_field_width = item.get_bit_field_width();
+
+        Ok(StructField {
+            offset,
+            bit_field_width,
+            typ,
+        })
     }
 }
