@@ -9,11 +9,12 @@ use crate::{
         c_function::{CFunction, FunctionArg},
         c_type::{CType, CTypeComparison},
     },
-    diff::{Change, ChangeBuf, ChangeKind},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
 
 pub struct FunctionDiff {
     pub changes: ChangeBuf<FunctionChange>,
+    pub source_diff: SourceDiff,
 }
 
 #[derive(Debug)]
@@ -67,7 +68,7 @@ impl Change for FunctionChange {
 }
 
 impl FunctionDiff {
-    pub fn compute_diff(a: &CFunction, b: &CFunction) -> anyhow::Result<Self> {
+    pub fn compute_diff(a: &CFunction, b: &CFunction) -> anyhow::Result<Option<Self>> {
         let mut changes = ChangeBuf::new();
 
         // return type
@@ -121,6 +122,22 @@ impl FunctionDiff {
             }
         }
 
-        Ok(Self { changes })
+        if changes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(Self {
+                changes,
+                source_diff: SourceDiff {
+                    old: a.to_string(),
+                    new: b.to_string(),
+                },
+            }))
+        }
+    }
+}
+
+impl ChangeContainer for FunctionDiff {
+    fn overall_kind(&self) -> ChangeKind {
+        self.changes.compatibility
     }
 }

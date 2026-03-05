@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use clang::{Entity, EntityKind};
 
 use crate::ast::c_type::CType;
@@ -6,6 +8,13 @@ use crate::ast::c_type::CType;
 pub struct CVar {
     pub typ: CType,
     pub is_invalid: bool,
+    display: String,
+}
+
+impl Display for CVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.display)
+    }
 }
 
 impl CVar {
@@ -13,6 +22,11 @@ impl CVar {
         assert!(e.get_kind() == EntityKind::VarDecl);
         let typ = e.get_type().unwrap().try_into()?;
         let is_invalid = e.is_invalid_declaration();
-        Ok(Self { typ, is_invalid })
+        let display = e.get_pretty_printer().print();
+        Ok(Self {
+            typ,
+            is_invalid,
+            display,
+        })
     }
 }

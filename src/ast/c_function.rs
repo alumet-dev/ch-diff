@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use clang::{Entity, EntityKind};
 
 use crate::ast::c_type::CType;
@@ -7,6 +9,13 @@ pub struct CFunction {
     // by position in the argument list
     pub arguments: Vec<FunctionArg>,
     pub return_type: CType,
+    display: String,
+}
+
+impl Display for CFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.display)
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -35,9 +44,11 @@ impl CFunction {
                 }
             })
             .collect();
+        let display = e.get_pretty_printer().print();
         Ok(Self {
             arguments,
             return_type,
+            display,
         })
     }
 }

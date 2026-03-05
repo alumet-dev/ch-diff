@@ -2,17 +2,20 @@
 //! - warning: field renamed, typedef change but equivalent underlying type
 //! - breaking: field removed, field added, field change (same name, different type)
 
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+
 use crate::{
     ast::{
         Node,
         c_struct::{CStruct, StructField},
         c_type::CTypeComparison,
     },
-    diff::{Change, ChangeBuf, ChangeKind},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
 
 pub struct StructDiff {
     pub changes: ChangeBuf<StructChange>,
+    pub source_diff: SourceDiff,
 }
 
 #[derive(Debug)]
@@ -34,6 +37,12 @@ pub enum StructChange {
         old: StructField,
         new: StructField,
     },
+    /// Same name, different offset
+    FieldMoved {
+        name: String,
+        old_offset: usize,
+        new_offset: usize,
+    },
     FieldAdded(Node<StructField>),
     FieldRemoved(Node<StructField>),
 }
@@ -50,6 +59,7 @@ impl Change for StructChange {
                     ChangeKind::Breaking
                 }
             }
+            StructChange::FieldMoved { .. } => ChangeKind::Breaking,
             StructChange::FieldAdded(_) => ChangeKind::Breaking,
             StructChange::FieldRemoved(_) => ChangeKind::Breaking,
         }
@@ -57,8 +67,10 @@ impl Change for StructChange {
 }
 
 impl StructDiff {
-    pub fn compute_diff(a: &CStruct, b: &CStruct) -> anyhow::Result<Self> {
+    pub fn compute_diff(a: &CStruct, b: &CStruct) -> anyhow::Result<Option<Self>> {
         let mut changes = ChangeBuf::new();
+
+        // TODO option to account for size change in types
 
         // breaking change: size difference
         if a.size != b.size {
@@ -67,6 +79,11 @@ impl StructDiff {
                 new_size: b.size,
             });
         }
+
+        // Since we compare fields by offset below, when a field is moved (for instance because the fields before it have changed), it will be detected as "removed" (old offset) and then "added" (new offest).
+        // To catch these changes and mark the field as "moved" properly, we keep the "removed" fields here.
+        let mut removed: FxHashMap<String, Node<StructField>> =
+            FxHashMap::with_hasher(FxBuildHasher);
 
         // compare the fields, by offset
         for (offset_a, field_a) in a.fields.iter() {
@@ -101,14 +118,14 @@ impl StructDiff {
                         }
                         (false, false) => {
                             // different type and name, they are probably completely unrelated
-                            changes.push(StructChange::FieldRemoved(field_a.to_owned()));
+                            removed.insert(field_a.name.clone(), field_a.to_owned());
                             changes.push(StructChange::FieldAdded(field_b.to_owned()));
                         }
                     }
                 }
                 None => {
                     // this offset no longer exists, the field has been removed
-                    changes.push(StructChange::FieldRemoved(field_a.to_owned()));
+                    removed.insert(field_a.name.clone(), field_a.to_owned());
                 }
             }
         }
@@ -116,10 +133,40 @@ impl StructDiff {
         // check new fields
         for (offset_b, field_b) in b.fields.iter() {
             if !a.fields.contains_key(offset_b) {
-                changes.push(StructChange::FieldAdded(field_b.to_owned()));
+                if let Some(field_a) = removed.remove(&field_b.name)
+                    && field_a.payload.typ == field_b.payload.typ
+                    && field_a.payload.bit_field_width == field_b.payload.bit_field_width
+                {
+                    // the field has been moved to another offset
+                    changes.push(StructChange::FieldMoved {
+                        name: field_a.name,
+                        old_offset: field_a.payload.offset,
+                        new_offset: field_b.payload.offset,
+                    });
+                } else {
+                    // the field has been completely removed
+                    changes.push(StructChange::FieldAdded(field_b.to_owned()));
+                }
             }
         }
 
-        Ok(Self { changes })
+        if changes.is_empty() {
+            Ok(None)
+        } else {
+            // normalize the source code
+            Ok(Some(Self {
+                changes,
+                source_diff: SourceDiff {
+                    old: a.to_string(),
+                    new: b.to_string(),
+                },
+            }))
+        }
+    }
+}
+
+impl ChangeContainer for StructDiff {
+    fn overall_kind(&self) -> ChangeKind {
+        self.changes.compatibility
     }
 }

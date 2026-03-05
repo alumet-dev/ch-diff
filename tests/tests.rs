@@ -1,17 +1,11 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use ch_diff::{
     ast::{
         HeaderContent,
-        c_enum::CEnum,
-        c_struct::{CStruct, StructField},
-        c_type::{BasicType, CType, SimplifiedTypeKind, StandardIntType},
-        c_union::CUnion,
+        c_type::{BasicType, SimplifiedTypeKind, StandardIntType},
     },
-    diff::{ChangeBuf, DiffReport, structs::StructChange},
+    diff::DiffReport,
 };
 use clang::{Clang, Index};
 use pretty_assertions::assert_eq;
@@ -173,7 +167,7 @@ fn parse_types() {
 }
 
 #[test]
-fn diff_functions() {
+fn diff_structs() {
     let clang = Clang::new().unwrap();
     let index = Index::new(&clang, true, true);
 
@@ -190,7 +184,7 @@ fn diff_functions() {
 
     let h1 = HeaderContent::analyse(tu1).unwrap();
     let h2 = HeaderContent::analyse(tu2).unwrap();
-    let diff = DiffReport::compute_diff(&h1, &h2).unwrap();
+    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2)).unwrap();
     assert!(diff.global_vars.is_empty());
     assert!(diff.enums.is_empty());
     assert!(!diff.structs.is_empty());
@@ -199,17 +193,43 @@ fn diff_functions() {
     for s in h1.structs {
         println!("{}: {:?}", s.0, s.1);
     }
+}
 
-    // let expected_changes = BTreeMap::from_iter(&[
-    //     (String::from("renamed"), ChangeBuf::from_iter([
-    //         StructChange::FieldRenamed { old_name: String::from("chr"), new_name: String::from("rch"), field: StructField {
-    //             offset: 0,
-    //             bit_field_width: None,
-    //             typ: CType::B,
-    //         } }
-    //     ]))
-    // ]);
-    for (s, sdiff) in diff.structs {
-        println!("{s}: {:?}", sdiff.changes);
+#[test]
+fn diff_structs_hard() {
+    let clang = Clang::new().unwrap();
+    let index = Index::new(&clang, true, true);
+
+    let file_v1 = PathBuf::from(file!())
+        .parent()
+        .unwrap()
+        .join("inputs/diff/structs_hard_v1.h");
+    let file_v2 = PathBuf::from(file!())
+        .parent()
+        .unwrap()
+        .join("inputs/diff/structs_hard_v2.h");
+    let tu1 = index.parser(file_v1).parse().unwrap();
+    let tu2 = index.parser(file_v2).parse().unwrap();
+
+    let h1 = HeaderContent::analyse(tu1).unwrap();
+    let h2 = HeaderContent::analyse(tu2).unwrap();
+    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2)).unwrap();
+    assert!(diff.global_vars.is_empty());
+    assert!(diff.enums.is_empty());
+    assert!(!diff.structs.is_empty());
+    assert!(diff.functions.is_empty());
+
+    for (name, cstruct) in h1.structs {
+        println!("\n{name} (size = {})", cstruct.payload.size);
+        for (offset, field) in cstruct.payload.fields {
+            println!("- offset {offset}: {field:?}");
+        }
+    }
+
+    for (name, cstruct) in h2.structs {
+        println!("\n{name} (size = {})", cstruct.payload.size);
+        for (offset, field) in cstruct.payload.fields {
+            println!("- offset {offset}: {field:?}");
+        }
     }
 }

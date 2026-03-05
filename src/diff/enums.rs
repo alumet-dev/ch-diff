@@ -9,11 +9,12 @@ use crate::{
         c_enum::{CEnum, CEnumValue},
         c_type::CType,
     },
-    diff::{Change, ChangeBuf, ChangeKind},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
 
 pub struct EnumDiff {
     pub changes: ChangeBuf<EnumChange>,
+    pub source_diff: SourceDiff,
 }
 
 pub enum EnumChange {
@@ -47,7 +48,7 @@ impl Change for EnumChange {
 }
 
 impl EnumDiff {
-    pub fn compute_diff(a: &CEnum, b: &CEnum) -> anyhow::Result<Self> {
+    pub fn compute_diff(a: &CEnum, b: &CEnum) -> anyhow::Result<Option<Self>> {
         let mut changes = ChangeBuf::new();
 
         // check type
@@ -85,6 +86,28 @@ impl EnumDiff {
             }
         }
 
-        Ok(Self { changes })
+        if changes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(Self {
+                changes,
+                source_diff: SourceDiff {
+                    old: normalize_enum_for_diff(a),
+                    new: normalize_enum_for_diff(b),
+                },
+            }))
+        }
     }
+}
+
+impl ChangeContainer for EnumDiff {
+    fn overall_kind(&self) -> ChangeKind {
+        self.changes.compatibility
+    }
+}
+
+fn normalize_enum_for_diff(e: &CEnum) -> String {
+    // Add a trailing comma to avoid the diff algorithm to highlight a change in the last line of the enum when a new value is added
+    let source = e.to_string();
+    source.replace("\n}", ",\n}")
 }

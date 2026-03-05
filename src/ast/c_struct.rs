@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind, Type};
@@ -10,8 +10,16 @@ pub struct CStruct {
     pub size: usize,
     // store the field by offset: renaming a field is not a breaking change
     pub fields: BTreeMap<usize, super::Node<StructField>>,
+    display: String,
 }
 
+impl Display for CStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.display)
+    }
+}
+
+/// Information about a struct field, **without its name**.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructField {
     pub offset: usize,
@@ -61,7 +69,12 @@ impl CStruct {
             fields.insert(field.offset, super::Node::from_entity(field, &child));
         }
 
-        Ok(Self { size, fields })
+        let display = e.get_pretty_printer().print();
+        Ok(Self {
+            size,
+            fields,
+            display,
+        })
     }
 }
 

@@ -1,3 +1,4 @@
+use core::fmt;
 use std::fmt::Display;
 
 use anyhow::{Context, anyhow};
@@ -11,14 +12,8 @@ use crate::ast::{
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct CType {
-    display: String,
     pub kind: SimplifiedTypeKind,
-}
-
-impl Display for CType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.display)
-    }
+    clang_display_name: String,
 }
 
 /// A simplified enum for c types.
@@ -208,8 +203,11 @@ impl<'tu> TryFrom<Type<'tu>> for CType {
             t => SimplifiedTypeKind::Basic(BasicType(t)),
         };
 
-        let display = t.get_display_name();
-        Ok(Self { display, kind })
+        let display_name = t.get_display_name();
+        Ok(Self {
+            clang_display_name: display_name,
+            kind,
+        })
     }
 }
 
@@ -233,7 +231,16 @@ pub enum CTypeComparison {
     Different,
 }
 
+pub enum TypePrintMode {
+    C,
+    Rust,
+}
+
 impl CType {
+    pub fn clang_display_name(&self) -> &str {
+        &self.clang_display_name
+    }
+
     pub fn compare(&self, other: &CType) -> CTypeComparison {
         fn compare_fields<'a>(
             fields_a: impl Iterator<Item = &'a Node<StructField>>,
@@ -247,7 +254,6 @@ impl CType {
         }
 
         match (&self.kind, &other.kind) {
-            (a, b) if a == b => CTypeComparison::Same,
             (SimplifiedTypeKind::Enum(a), SimplifiedTypeKind::Enum(b))
                 if a.underlying_type == b.underlying_type =>
             {
@@ -272,6 +278,7 @@ impl CType {
                     CTypeComparison::Different
                 }
             }
+            (a, b) if a == b => CTypeComparison::Same,
             _ => CTypeComparison::Different,
         }
     }

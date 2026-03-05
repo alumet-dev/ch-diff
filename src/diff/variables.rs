@@ -4,7 +4,7 @@ use crate::{
         c_type::{CType, CTypeComparison},
         c_var::CVar,
     },
-    diff::{Change, ChangeBuf, ChangeKind},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind},
 };
 
 pub struct GlobalVarDiff {
@@ -20,6 +20,16 @@ pub enum VarChange {
     },
     Added(Node<CVar>),
     Removed(Node<CVar>),
+}
+
+impl VarChange {
+    pub fn var_name(&self) -> &str {
+        match self {
+            VarChange::TypeChanged { name, .. } => &name,
+            VarChange::Added(node) => &node.name,
+            VarChange::Removed(node) => &node.name,
+        }
+    }
 }
 
 impl Change for VarChange {
@@ -79,6 +89,12 @@ impl GlobalVarDiff {
     }
 
     pub fn compatibility(&self) -> ChangeKind {
+        self.changes.compatibility
+    }
+}
+
+impl ChangeContainer for GlobalVarDiff {
+    fn overall_kind(&self) -> ChangeKind {
         self.changes.compatibility
     }
 }
