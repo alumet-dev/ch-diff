@@ -30,11 +30,8 @@ pub enum Value {
 
 impl CEnum {
     pub fn try_from_clang<'a>(e: Entity<'a>) -> anyhow::Result<Self> {
-        let underlying_type: CType = e
-            .get_enum_underlying_type()
-            .unwrap()
-            .get_canonical_type()
-            .try_into()?;
+        let underlying_type = e.get_enum_underlying_type().unwrap().get_canonical_type();
+        let underlying_type = CType::try_from_clang(underlying_type, None)?;
         let variants = e
             .get_children()
             .iter()
@@ -45,10 +42,10 @@ impl CEnum {
 
                 let (v_signed, v_unsigned) = item.get_enum_constant_value().unwrap();
                 let value = match &underlying_type.kind {
-                    SimplifiedTypeKind::Basic(BasicType(
+                    SimplifiedTypeKind::OtherBasic(BasicType(
                         TypeKind::UShort | TypeKind::UInt | TypeKind::ULong,
                     )) => Value::Unsigned(v_unsigned),
-                    SimplifiedTypeKind::Basic(BasicType(
+                    SimplifiedTypeKind::OtherBasic(BasicType(
                         TypeKind::Short | TypeKind::Int | TypeKind::Long,
                     )) => Value::Signed(v_signed),
                     SimplifiedTypeKind::StandardInt(i) => {

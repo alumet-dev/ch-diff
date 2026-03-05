@@ -3,13 +3,17 @@ use std::fmt::Display;
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind};
 
-use crate::ast::{Node, c_struct::StructField};
+use crate::ast::{c_struct::StructField, c_type::anon::AnonContext};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct CUnion {
     pub size: usize,
     // it's a union, the fields overlap
     pub fields: Vec<super::Node<StructField>>,
+
+    /// Definitions of anonymous types.
+    pub anonymous: AnonContext,
+
     display: String,
 }
 
@@ -31,6 +35,7 @@ impl CUnion {
 
         let struct_type = e.get_type().unwrap();
         let size = struct_type.get_sizeof().unwrap();
+        let mut anonymous = AnonContext::new();
 
         let children = e.get_children();
         let mut fields = Vec::with_capacity(children.len());
@@ -39,13 +44,14 @@ impl CUnion {
                 continue;
             }
 
-            let field = StructField::try_from_clang(child, struct_type).with_context(|| {
-                format!(
-                    "failed to parse union field {:?} in {}",
-                    child.get_name(),
-                    struct_type.get_display_name()
-                )
-            })?;
+            let field = StructField::try_from_clang(child, struct_type, &mut anonymous)
+                .with_context(|| {
+                    format!(
+                        "failed to parse union field {:?} in {}",
+                        child.get_name(),
+                        struct_type.get_display_name()
+                    )
+                })?;
             fields.push(super::Node::from_entity(field, &child));
         }
         let display = e.get_pretty_printer().print();
@@ -53,6 +59,7 @@ impl CUnion {
         Ok(Self {
             size,
             fields,
+            anonymous,
             display,
         })
     }

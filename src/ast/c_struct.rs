@@ -3,13 +3,19 @@ use std::{collections::BTreeMap, fmt::Display};
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind, Type};
 
-use crate::ast::c_type::CType;
+use crate::ast::c_type::{CType, anon::AnonContext};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct CStruct {
+    /// Size of the struct in bytes.
     pub size: usize,
-    // store the field by offset: renaming a field is not a breaking change
+
+    /// Fields by offset, because renaming a field is not a breaking change (for the ABI).
     pub fields: BTreeMap<usize, super::Node<StructField>>,
+
+    /// Definitions of anonymous types.
+    pub anonymous: AnonContext,
+
     display: String,
 }
 
@@ -51,6 +57,7 @@ impl CStruct {
 
         let struct_type = e.get_type().unwrap();
         let size = struct_type.get_sizeof().unwrap();
+        let mut anonymous = AnonContext::new();
 
         let children = e.get_children();
         let mut fields = BTreeMap::new();
@@ -59,13 +66,14 @@ impl CStruct {
                 continue;
             }
 
-            let field = StructField::try_from_clang(child, struct_type).with_context(|| {
-                format!(
-                    "failed to parse struct field {:?} in {}",
-                    child.get_name(),
-                    struct_type.get_display_name()
-                )
-            })?;
+            let field = StructField::try_from_clang(child, struct_type, &mut anonymous)
+                .with_context(|| {
+                    format!(
+                        "failed to parse struct field {:?} in {}",
+                        child.get_name(),
+                        struct_type.get_display_name()
+                    )
+                })?;
             fields.insert(field.offset, super::Node::from_entity(field, &child));
         }
 
@@ -73,19 +81,25 @@ impl CStruct {
         Ok(Self {
             size,
             fields,
+            anonymous,
             display,
         })
     }
 }
 
 impl StructField {
-    pub fn try_from_clang<'a>(item: Entity<'a>, record_type: Type<'a>) -> anyhow::Result<Self> {
+    pub fn try_from_clang<'a>(
+        item: Entity<'a>,
+        parent_type: Type<'a>,
+        parent_ctx: &mut AnonContext,
+    ) -> anyhow::Result<Self> {
         assert!(item.get_kind() == EntityKind::FieldDecl);
 
         // we have a field declaration
         let name = item.get_name().unwrap_or_default();
-        let offset = record_type.get_offsetof(&name).unwrap();
-        let typ = item.get_type().unwrap().try_into().unwrap();
+        let offset = parent_type.get_offsetof(&name).unwrap();
+        let typ = item.get_type().unwrap();
+        let typ = CType::try_from_clang(typ, Some(parent_ctx))?;
 
         // it may be a bit-field
         let bit_field_width = item.get_bit_field_width();

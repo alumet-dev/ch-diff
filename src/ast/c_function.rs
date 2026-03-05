@@ -28,7 +28,8 @@ pub struct FunctionArg {
 impl CFunction {
     pub fn try_from_clang<'a>(e: Entity<'a>) -> anyhow::Result<Self> {
         assert!(e.get_kind() == EntityKind::FunctionDecl);
-        let return_type = e.get_result_type().unwrap().try_into()?;
+        let return_type = e.get_result_type().unwrap();
+        let return_type = CType::try_from_clang(return_type, None)?;
         let arguments = e
             .get_arguments()
             .unwrap()
@@ -36,7 +37,8 @@ impl CFunction {
             .enumerate()
             .map(|(position, arg)| {
                 let name = arg.get_name().unwrap_or_default();
-                let typ = arg.get_type().unwrap().try_into().unwrap();
+                let typ = arg.get_type().unwrap();
+                let typ = CType::try_from_clang(typ, None).unwrap();
                 FunctionArg {
                     name,
                     typ,

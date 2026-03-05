@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ch_diff::{
     ast::{
         HeaderContent,
-        c_type::{BasicType, SimplifiedTypeKind, StandardIntType},
+        c_type::{BasicType, SimplifiedTypeKind, stdint::StandardIntType},
     },
     diff::DiffReport,
 };
@@ -97,7 +97,7 @@ fn parse_types() {
             .payload
             .typ
             .kind,
-        SimplifiedTypeKind::Basic(BasicType(clang::TypeKind::Int))
+        SimplifiedTypeKind::OtherBasic(BasicType(clang::TypeKind::Int))
     );
     assert_eq!(
         content

@@ -20,7 +20,8 @@ impl Display for CVar {
 impl CVar {
     pub fn try_from_clang<'a>(e: Entity<'a>) -> anyhow::Result<Self> {
         assert!(e.get_kind() == EntityKind::VarDecl);
-        let typ = e.get_type().unwrap().try_into()?;
+        let typ = e.get_type().unwrap();
+        let typ = CType::try_from_clang(typ, None)?;
         let is_invalid = e.is_invalid_declaration();
         let display = e.get_pretty_printer().print();
         Ok(Self {
