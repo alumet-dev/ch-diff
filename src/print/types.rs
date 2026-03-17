@@ -1,67 +1,384 @@
 //! Utilities for printing C types.
 
-use std::io::Write;
+use std::{borrow::Cow, fmt::Display, io::Write};
 
-use itertools::{Itertools, Position};
+use itertools::Itertools;
 
-use crate::ast::c_type::{CType, SimplifiedTypeKind};
+use crate::ast::c_type::{CType, SimplifiedTypeKind, stdint::StandardIntType};
 
 trait TypePrinter {
     fn print_type(&mut self, t: &CType) -> anyhow::Result<()>;
 }
 
+pub struct CLikeTypePrinter<W: Write> {
+    writer: W,
+}
+
 pub struct RustLikeTypePrinter<W: Write> {
-    where_declarations: Vec<(String, CType)>,
     writer: W,
 }
 
 impl<W: Write> RustLikeTypePrinter<W> {
+    pub fn new(writer: W) -> Self {
+        Self { writer }
+    }
+
     fn rec_print_type(&mut self, t: &CType) -> anyhow::Result<()> {
         match &t.kind {
-            // SimplifiedTypeKind::Basic(basic_type) => todo!(),
-            // SimplifiedTypeKind::Enum(enumerated_type) => todo!(),
             SimplifiedTypeKind::Array(ty) => {
                 // [elem ; n]
                 write!(self.writer, "[")?;
                 self.rec_print_type(&ty.element_type)?;
-                write!(self.writer, " ; ")?;
+                write!(self.writer, "; ")?;
                 match ty.size {
                     Some(n) => write!(self.writer, "{n}")?,
                     None => write!(self.writer, "variable-length")?,
                 }
                 write!(self.writer, "]")?;
             }
-            SimplifiedTypeKind::Record(named_record_type) => {
-                write!(self.writer, "{}", &named_record_type.name)?
+            SimplifiedTypeKind::Record(ty) => write!(self.writer, "{}", &ty.name)?,
+            SimplifiedTypeKind::Enum(ty) => write!(self.writer, "{}", ty.enum_name)?,
+            SimplifiedTypeKind::Typedef(ty) => {
+                write!(self.writer, "{}", ty.alias)?;
             }
-            SimplifiedTypeKind::AnonStruct(anon) => {
-                // the definition will be written at the end, in a "where" clause
+            SimplifiedTypeKind::Anonymous(id) => {
+                // the definition of anon types is meant to be printed somewhere else
+                write!(self.writer, "<anon{id}>")?;
             }
-            SimplifiedTypeKind::AnonUnion(anon) => {
-                todo!()
+            SimplifiedTypeKind::Pointer(ty) => {
+                // *pointee
+                write!(self.writer, "*")?;
+                self.rec_print_type(&ty.pointee)?;
             }
-            // SimplifiedTypeKind::Pointer(pointer_type) => todo!(),
-            // SimplifiedTypeKind::Typedef(alias_type) => todo!(),
-            // SimplifiedTypeKind::StandardInt(standard_int_type) => todo!(),
-            _ => (),
+            SimplifiedTypeKind::StandardInt(ty) => match ty {
+                StandardIntType::IntFixed(bits) => write!(self.writer, "i{bits}")?,
+                StandardIntType::UIntFixed(bits) => write!(self.writer, "u{bits}")?,
+                StandardIntType::IntPtr => write!(self.writer, "intptr_t")?,
+                StandardIntType::UIntPtr => write!(self.writer, "uintptr_t")?,
+                StandardIntType::Size => write!(self.writer, "size_t")?,
+            },
+            SimplifiedTypeKind::OtherBasic(ty) => write!(self.writer, "{:?}", ty.0)?,
         };
         Ok(())
+    }
+}
+
+impl RustLikeTypePrinter<Vec<u8>> {
+    pub fn in_memory() -> Self {
+        Self { writer: Vec::new() }
+    }
+
+    pub fn into_string(self) -> String {
+        String::from_utf8(self.writer).unwrap()
     }
 }
 
 impl<W: Write> TypePrinter for RustLikeTypePrinter<W> {
     fn print_type(&mut self, t: &CType) -> anyhow::Result<()> {
         self.rec_print_type(t)?;
-        if !self.where_declarations.is_empty() {
-            write!(self.writer, "\n where ");
-            for (pos, (key, typ)) in self.where_declarations.iter().with_position() {
-                write!(self.writer, "{key}")?;
-                // self.rec_print_type(typ)?; //TODO anon types can add new where decls…
-                if pos != Position::Last && pos != Position::Only {
-                    write!(self.writer, ",\n");
+        Ok(())
+    }
+}
+
+// C types are weird
+struct CDecl {
+    basic_type: String,
+    chain: Vec<ChainItem>,
+}
+
+struct CDeclString {
+    left: Vec<Cow<'static, str>>,
+    right_rev: Vec<Cow<'static, str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ChainItem {
+    Array(Option<usize>),
+    Pointer,
+}
+
+impl CDecl {
+    fn build(t: &CType) -> anyhow::Result<Self> {
+        let mut decl = Self {
+            basic_type: String::new(),
+            chain: Vec::new(),
+        };
+        decl.rec_build(t)?;
+        Ok(decl)
+    }
+
+    fn rec_build(&mut self, t: &CType) -> anyhow::Result<()> {
+        match &t.kind {
+            SimplifiedTypeKind::Array(ty) => {
+                self.chain.push(ChainItem::Array(ty.size));
+                self.rec_build(&ty.element_type)?;
+            }
+            SimplifiedTypeKind::Pointer(ty) => {
+                self.chain.push(ChainItem::Pointer);
+                self.rec_build(&ty.pointee)?;
+            }
+            SimplifiedTypeKind::Record(ty) => {
+                self.basic_type = ty.name.to_owned();
+            }
+            SimplifiedTypeKind::Enum(ty) => {
+                self.basic_type = ty.enum_name.to_owned();
+            }
+            SimplifiedTypeKind::Typedef(ty) => {
+                self.basic_type = ty.alias.to_owned();
+            }
+            SimplifiedTypeKind::Anonymous(id) => {
+                self.basic_type = format!("<anon{id}>");
+            }
+            SimplifiedTypeKind::StandardInt(ty) => {
+                let name = match ty {
+                    StandardIntType::IntFixed(bits) => format!("int{bits}_t"),
+                    StandardIntType::UIntFixed(bits) => format!("uint{bits}_t"),
+                    StandardIntType::IntPtr => "intptr_t".to_owned(),
+                    StandardIntType::UIntPtr => "uintptr_t".to_owned(),
+                    StandardIntType::Size => "size_t".to_owned(),
+                };
+                self.basic_type = name;
+            }
+            SimplifiedTypeKind::OtherBasic(ty) => {
+                self.basic_type = format!("{ty:?}").to_lowercase();
+            }
+        };
+        Ok(())
+    }
+
+    fn into_string(self) -> String {
+        assert!(!self.basic_type.is_empty());
+        let mut str = CDeclString::with_basic_type(self.basic_type);
+        log::trace!("chain: {:?}", self.chain);
+
+        match self.chain.as_slice() {
+            [] => (),
+            [single] => str.push(single, None),
+            _ => {
+                for (item, parent) in self.chain.iter().rev().tuple_windows() {
+                    log::trace!("item: {item:?}, parent: {parent:?}");
+                    str.push(item, Some(parent));
                 }
+                // handle the last item (last in rev = first)
+                let last = self.chain.first().unwrap();
+                str.push(last, None);
             }
         }
+
+        str.finish();
+        str.to_string()
+    }
+}
+
+impl CDeclString {
+    fn with_basic_type(basic: String) -> Self {
+        Self {
+            left: vec![basic.into(), " ".into()],
+            right_rev: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, item: &ChainItem, parent: Option<&ChainItem>) {
+        match item {
+            ChainItem::Array(size) => {
+                match size {
+                    Some(n) => self.right_rev.push(format!("[{n}]").into()),
+                    None => self.right_rev.push("[]".into()),
+                };
+                match parent {
+                    Some(ChainItem::Pointer) => {
+                        // we must add parens, for example in (*var)[2]
+                        self.left.push("(".into());
+                        self.right_rev.push(")".into());
+                    }
+                    _ => (),
+                }
+            }
+            ChainItem::Pointer => {
+                self.left.push("*".into());
+            }
+        }
+    }
+
+    fn finish(&mut self) {
+        // remove extra space
+        if self.left.len() == 2 {
+            self.left.truncate(1);
+        }
+    }
+}
+
+impl Display for CDeclString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        log::trace!("left: {:?}", self.left);
+        log::trace!("right: {:?}", self.right_rev);
+        for elem in self.left.iter() {
+            f.write_str(elem.as_ref())?;
+        }
+        for elem in self.right_rev.iter().rev() {
+            f.write_str(elem.as_ref())?;
+        }
         Ok(())
+    }
+}
+
+impl<W: Write> CLikeTypePrinter<W> {
+    pub fn new(writer: W) -> Self {
+        Self { writer }
+    }
+}
+
+impl CLikeTypePrinter<Vec<u8>> {
+    pub fn in_memory() -> Self {
+        Self { writer: Vec::new() }
+    }
+
+    pub fn into_string(self) -> String {
+        String::from_utf8(self.writer).unwrap()
+    }
+}
+
+impl<W: Write> TypePrinter for CLikeTypePrinter<W> {
+    fn print_type(&mut self, t: &CType) -> anyhow::Result<()> {
+        let decl = CDecl::build(t)?;
+        let str = decl.into_string();
+        write!(self.writer, "{str}")?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::c_type::{ArrayType, PointerType};
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    fn test_print_type_c(expected: &str, ty: &SimplifiedTypeKind) {
+        let _ = env_logger::builder()
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
+        let t = CType::new(ty.to_owned());
+        let mut printer = CLikeTypePrinter::in_memory();
+        printer.print_type(&t).expect("printing failed");
+        assert_eq!(expected, printer.into_string());
+    }
+
+    fn test_print_type_rust(expected: &str, ty: &SimplifiedTypeKind) {
+        let _ = env_logger::builder()
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
+        let t = CType::new(ty.to_owned());
+        let mut printer = RustLikeTypePrinter::in_memory();
+        printer.print_type(&t).expect("printing failed");
+        assert_eq!(expected, printer.into_string());
+    }
+
+    #[test]
+    fn test_basic_type() {
+        let ty = SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(8));
+        test_print_type_c("uint8_t", &ty);
+        test_print_type_rust("u8", &ty);
+    }
+
+    #[test]
+    fn test_pointer() {
+        let ty = SimplifiedTypeKind::Pointer(Box::new(PointerType {
+            pointee: CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::IntFixed(
+                16,
+            ))),
+        }));
+        test_print_type_c("int16_t *", &ty);
+        test_print_type_rust("*i16", &ty);
+    }
+
+    #[test]
+    fn test_array() {
+        let ty = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(
+                32,
+            ))),
+            size: Some(5),
+        }));
+        test_print_type_c("uint32_t[5]", &ty);
+        test_print_type_rust("[u32; 5]", &ty);
+    }
+
+    #[test]
+    fn test_arrays() {
+        // array 3 of (array 4 of (array 5 of uint32_t))
+        let uint32 = CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(
+            32,
+        )));
+        let array5 = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: uint32,
+            size: Some(5),
+        }));
+        let array4 = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(array5),
+            size: Some(4),
+        }));
+        let array3 = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(array4),
+            size: Some(3),
+        }));
+        test_print_type_c("uint32_t[3][4][5]", &array3);
+        test_print_type_rust("[[[u32; 5]; 4]; 3]", &array3);
+    }
+
+    #[test]
+    fn test_pointer_to_array() {
+        let array = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(
+                32,
+            ))),
+            size: Some(5),
+        }));
+        let ty = SimplifiedTypeKind::Pointer(Box::new(PointerType {
+            pointee: CType::new(array),
+        }));
+        test_print_type_c("uint32_t (*)[5]", &ty);
+        test_print_type_rust("*[u32; 5]", &ty);
+    }
+
+    #[test]
+    fn test_array_of_pointers() {
+        let ptr = SimplifiedTypeKind::Pointer(Box::new(PointerType {
+            pointee: CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(
+                8,
+            ))),
+        }));
+        let ty = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(ptr),
+            size: Some(10),
+        }));
+        test_print_type_c("uint8_t *[10]", &ty);
+        test_print_type_rust("[*u8; 10]", &ty);
+    }
+
+    #[test]
+    fn test_very_complex_combination() {
+        let ptr_to_u8 = SimplifiedTypeKind::Pointer(Box::new(PointerType {
+            pointee: CType::new(SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(
+                8,
+            ))),
+        }));
+
+        let array_of_ptr_to_u8 = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(ptr_to_u8),
+            size: Some(2),
+        }));
+
+        let ptr_to_array_of_ptr_to_u8 = SimplifiedTypeKind::Pointer(Box::new(PointerType {
+            pointee: CType::new(array_of_ptr_to_u8),
+        }));
+
+        let ty = SimplifiedTypeKind::Array(Box::new(ArrayType {
+            element_type: CType::new(ptr_to_array_of_ptr_to_u8),
+            size: Some(3),
+        }));
+
+        test_print_type_c("uint8_t *(*[3])[2]", &ty);
+        test_print_type_rust("[*[*u8; 2]; 3]", &ty);
     }
 }
