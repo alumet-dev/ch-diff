@@ -230,6 +230,24 @@ impl super::ReportPrinter for AnsiPrinter {
                 }
             }
         }
+
+        // opaques
+        if !report.opaques.is_empty() {
+            writeln!(self.writer, "\n## Opaque Declarations")?;
+        }
+        for (name, changes) in report.opaques.into_iter() {
+            let qual = "opaque";
+            match changes {
+                DeclChange::Removed => {
+                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
+                    writeln!(self.writer, "{}", "removed".red())?;
+                }
+                DeclChange::Changed(diff) => {
+                    writeln!(self.writer, "\n### {qual} {name}\n")?;
+                    InlineDiff(diff.old, diff.new).print_ansi(self)?;
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -301,7 +319,7 @@ impl Printable for FunctionChange {
                 let new_typ = p.type_printer.type_to_string(new_typ)?;
                 writeln!(
                     p.writer,
-                    "type of {name} changed: {} -> {}",
+                    "type of `{name}` changed: {} -> {}",
                     format!("{old_typ}").red(),
                     format!("{new_typ}").green()
                 )?;
@@ -310,14 +328,14 @@ impl Printable for FunctionChange {
                 writeln!(
                     p.writer,
                     "parameter removed: {}",
-                    format!("{:?}", arg.name).red(),
+                    format!("{}", arg.name).red(),
                 )?;
             }
             FunctionChange::ParameterAdded(arg) => {
                 writeln!(
                     p.writer,
                     "parameter added: {}",
-                    format!("{:?}", arg.name).red(),
+                    format!("{}", arg.name).red(),
                 )?;
             }
         };
@@ -332,7 +350,7 @@ impl Printable for EnumChange {
                 writeln!(
                     p.writer,
                     "value added: {}",
-                    format!("{:?}", node.name).green(),
+                    format!("{}", node.name).green(),
                 )?;
             }
             EnumChange::ValueRenamed {
@@ -351,7 +369,7 @@ impl Printable for EnumChange {
                 writeln!(
                     p.writer,
                     "value removed: {}",
-                    format!("{:?}", node.name).red(),
+                    format!("{}", node.name).red(),
                 )?;
             }
             EnumChange::TypeChanged { old, new } => {

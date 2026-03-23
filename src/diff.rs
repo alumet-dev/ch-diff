@@ -5,13 +5,14 @@ use anyhow::Context;
 use crate::{
     ast::HeaderContent,
     diff::{
-        enums::EnumDiff, functions::FunctionDiff, structs::StructDiff,
+        enums::EnumDiff, functions::FunctionDiff, opaque::OpaqueDiff, structs::StructDiff,
         symbols::ExportedSymbolsDiff, unions::UnionDiff, variables::GlobalVarDiff,
     },
 };
 
 pub mod enums;
 pub mod functions;
+pub mod opaque;
 pub mod structs;
 pub mod symbols;
 pub mod unions;
@@ -116,6 +117,7 @@ pub struct DiffReport {
     pub structs: BTreeMap<String, DeclChange<StructDiff>>,
     pub unions: BTreeMap<String, DeclChange<UnionDiff>>,
     pub functions: BTreeMap<String, DeclChange<FunctionDiff>>,
+    pub opaques: BTreeMap<String, DeclChange<OpaqueDiff>>,
     pub symbols: ExportedSymbolsDiff,
 }
 
@@ -195,7 +197,7 @@ impl DiffReport {
         // functions
         let mut functions = BTreeMap::new();
         for (name, node) in a.functions.iter() {
-            let change = match b.functions.get(name) {
+            match b.functions.get(name) {
                 Some(new_node) => {
                     if let Some(diff) =
                         FunctionDiff::compute_diff(&node.payload, &new_node.payload)?
@@ -205,6 +207,22 @@ impl DiffReport {
                 }
                 None => {
                     functions.insert(name.to_owned(), DeclChange::Removed);
+                }
+            };
+        }
+
+        // opaque declarations
+        let mut opaques = BTreeMap::new();
+        for (name, node) in a.opaques.iter() {
+            match b.opaques.get(name) {
+                Some(new_node) => {
+                    if let Some(diff) = OpaqueDiff::compute_diff(&node.payload, &new_node.payload)?
+                    {
+                        opaques.insert(name.to_owned(), DeclChange::Changed(diff));
+                    }
+                }
+                None => {
+                    opaques.insert(name.to_owned(), DeclChange::Removed);
                 }
             };
         }
@@ -222,6 +240,7 @@ impl DiffReport {
             unions,
             functions,
             symbols,
+            opaques,
         })
     }
 
