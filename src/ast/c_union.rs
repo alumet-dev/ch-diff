@@ -28,7 +28,7 @@ impl CUnion {
         assert!(e.get_kind() == EntityKind::UnionDecl);
         if !e.is_definition() {
             return Err(anyhow!(
-                "cannot create StructDef the declaration of {}, I need a definition",
+                "cannot create StructDef from the declaration of {}, I need a definition",
                 e.get_name().unwrap()
             ));
         }

@@ -50,7 +50,7 @@ impl CStruct {
         assert!(e.get_kind() == EntityKind::StructDecl);
         if !e.is_definition() {
             return Err(anyhow!(
-                "cannot create StructDef the declaration of {}, I need a definition",
+                "cannot create StructDef from the declaration of {}, I need a definition",
                 e.get_name().unwrap()
             ));
         }

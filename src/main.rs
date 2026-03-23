@@ -75,6 +75,6 @@ struct Args {
     output: Option<PathBuf>,
 
     /// How to print types in the report.
-    #[arg(long, default_value_t = TypePrintingStyle::Rust)]
+    #[arg(long, default_value = "rust")]
     types: TypePrintingStyle,
 }

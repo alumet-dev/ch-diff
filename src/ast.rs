@@ -5,12 +5,13 @@ use std::{collections::BTreeMap, path::PathBuf};
 use clang::{Clang, Entity, EntityKind, Index, TranslationUnit};
 
 use crate::ast::{
-    c_enum::CEnum, c_function::CFunction, c_struct::CStruct, c_type::AliasType, c_union::CUnion,
-    c_var::CVar,
+    c_enum::CEnum, c_function::CFunction, c_opaque::OpaqueDecl, c_struct::CStruct,
+    c_type::AliasType, c_union::CUnion, c_var::CVar,
 };
 
 pub mod c_enum;
 pub mod c_function;
+pub mod c_opaque;
 pub mod c_struct;
 pub mod c_type;
 pub mod c_union;
@@ -43,6 +44,7 @@ pub struct HeaderContent {
     pub unions: BTreeMap<String, Node<CUnion>>,
     pub enums: BTreeMap<String, Node<CEnum>>,
     pub functions: BTreeMap<String, Node<CFunction>>,
+    pub opaques: BTreeMap<String, Node<OpaqueDecl>>,
 }
 
 impl HeaderContent {
@@ -63,6 +65,14 @@ impl HeaderContent {
                     let alias = AliasType::try_from_clang(item)?;
                     let node = Node::from_entity(alias, &item);
                     content.typedefs.insert(node.name.clone(), node);
+                }
+                EntityKind::StructDecl | EntityKind::EnumDecl | EntityKind::UnionDecl
+                    if !item.is_definition() =>
+                {
+                    // opaque type
+                    let opaque = OpaqueDecl::try_from_clang(item)?;
+                    let node = Node::from_entity(opaque, &item);
+                    content.opaques.insert(node.name.clone(), node);
                 }
                 EntityKind::StructDecl => {
                     let s = CStruct::try_from_clang(item)?;

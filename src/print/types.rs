@@ -22,7 +22,7 @@ pub trait TypePrinter {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, clap::ValueEnum, Display)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, clap::ValueEnum)]
 pub enum TypePrintingStyle {
     C,
     Rust,

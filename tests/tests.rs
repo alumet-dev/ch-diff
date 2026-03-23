@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use ch_diff::{
     ast::{
         HeaderContent,
+        c_opaque::OpaqueDeclKind,
         c_type::{BasicType, SimplifiedTypeKind, stdint::StandardIntType},
     },
     diff::DiffReport,
 };
-use clang::{Clang, Index};
+use clang::{Clang, EntityKind, Index};
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -232,4 +233,53 @@ fn diff_structs_hard() {
             println!("- offset {offset}: {field:?}");
         }
     }
+}
+
+#[test]
+fn parse_opaque_structs() {
+    let clang = Clang::new().unwrap();
+    let index = Index::new(&clang, true, true);
+
+    let file = PathBuf::from(file!())
+        .parent()
+        .unwrap()
+        .join("inputs/opaque.h");
+    let tu = index.parser(file).parse().unwrap();
+
+    for e in tu.get_entity().get_children() {
+        if !e.is_in_main_file() {
+            continue;
+        }
+        let s = e.get_pretty_printer().print();
+        println!("{s}");
+        println!(
+            "is_def={}, is_decl={}",
+            e.is_definition(),
+            e.is_declaration()
+        );
+        println!("is_anon_rdecl={}", e.is_anonymous_record_decl());
+        println!("is_anon={}", e.is_anonymous());
+        if e.get_kind() == EntityKind::EnumDecl {
+            println!("underlying type: {:?}", e.get_enum_underlying_type());
+        }
+        println!("def={:?}", e.get_definition());
+        println!("");
+    }
+
+    let content = HeaderContent::analyse(tu).unwrap();
+    let mut expected_opaques = vec![
+        ("foo_".to_owned(), OpaqueDeclKind::Struct),
+        ("opaque_struct".to_owned(), OpaqueDeclKind::Struct),
+        ("opaque".to_owned(), OpaqueDeclKind::Struct),
+        ("opaque_enum".to_owned(), OpaqueDeclKind::Enum),
+        ("opaque_union".to_owned(), OpaqueDeclKind::Union),
+    ];
+    expected_opaques.sort_by_key(|x| x.0.clone());
+    let mut actual_opaque = content
+        .opaques
+        .iter()
+        .map(|(name, decl)| (name.to_owned(), decl.payload.kind.to_owned()))
+        .collect::<Vec<_>>();
+    actual_opaque.sort_by_key(|x| x.0.clone());
+    assert_eq!(expected_opaques, actual_opaque);
 }
