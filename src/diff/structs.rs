@@ -8,7 +8,7 @@ use crate::{
     ast::{
         Node,
         c_struct::{CStruct, StructField},
-        c_type::CTypeComparison,
+        c_type::{CTypeComparison, anon::AnonContext},
     },
     diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
@@ -16,6 +16,8 @@ use crate::{
 pub struct StructDiff {
     pub changes: ChangeBuf<StructChange>,
     pub source_diff: SourceDiff,
+    pub old_anon: AnonContext,
+    pub new_anon: AnonContext,
 }
 
 #[derive(Debug)]
@@ -153,13 +155,14 @@ impl StructDiff {
         if changes.is_empty() {
             Ok(None)
         } else {
-            // normalize the source code
             Ok(Some(Self {
                 changes,
                 source_diff: SourceDiff {
                     old: a.to_string(),
                     new: b.to_string(),
                 },
+                new_anon: a.anonymous.clone(),
+                old_anon: b.anonymous.clone(),
             }))
         }
     }

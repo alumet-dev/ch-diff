@@ -47,6 +47,8 @@ pub enum SimplifiedTypeKind {
 }
 
 pub mod anon {
+    use std::fmt::Display;
+
     use derive_more::Display;
 
     use super::{CStruct, CUnion};
@@ -66,6 +68,15 @@ pub mod anon {
     #[derive(Debug, PartialEq, Clone)]
     pub struct AnonContext {
         anon_defs: Vec<AnonymousMemberDef>,
+    }
+
+    impl Display for AnonymousMemberDef {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                AnonymousMemberDef::Struct(cstruct) => cstruct.fmt(f),
+                AnonymousMemberDef::Union(cunion) => cunion.fmt(f),
+            }
+        }
     }
 
     impl AnonContext {

@@ -1,82 +1,84 @@
 //! Utilities for printing C types.
 
-use std::{borrow::Cow, fmt::Display, io::Write};
+use std::{borrow::Cow, fmt::Display, fmt::Write};
 
+use anyhow::Context;
 use itertools::Itertools;
 
 use crate::ast::c_type::{CType, SimplifiedTypeKind, stdint::StandardIntType};
 
-trait TypePrinter {
-    fn print_type(&mut self, t: &CType) -> anyhow::Result<()>;
-}
+/// Trait for printing types.
+pub trait TypePrinter {
+    /// Prints a type to any writer.
+    fn print_type(&mut self, writer: &mut dyn Write, t: &CType) -> anyhow::Result<()>;
 
-pub struct CLikeTypePrinter<W: Write> {
-    writer: W,
-}
-
-pub struct RustLikeTypePrinter<W: Write> {
-    writer: W,
-}
-
-impl<W: Write> RustLikeTypePrinter<W> {
-    pub fn new(writer: W) -> Self {
-        Self { writer }
+    /// Prints a type to a new string.
+    fn type_to_string(&mut self, t: &CType) -> anyhow::Result<String> {
+        let mut str = String::new();
+        self.print_type(&mut str, t)
+            .with_context(|| format!("printing failure for {t:?}"))?;
+        Ok(str)
     }
+}
 
-    fn rec_print_type(&mut self, t: &CType) -> anyhow::Result<()> {
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum TypePrintingStyle {
+    C,
+    Rust,
+}
+
+// TODO we'll add options later
+pub struct CLikeTypePrinter {}
+pub struct RustLikeTypePrinter {}
+
+impl RustLikeTypePrinter {
+    fn rec_print_type<W: Write + ?Sized>(
+        &mut self,
+        writer: &mut W,
+        t: &CType,
+    ) -> anyhow::Result<()> {
         match &t.kind {
             SimplifiedTypeKind::Array(ty) => {
                 // [elem ; n]
-                write!(self.writer, "[")?;
-                self.rec_print_type(&ty.element_type)?;
-                write!(self.writer, "; ")?;
+                write!(writer, "[")?;
+                self.rec_print_type(writer, &ty.element_type)?;
+                write!(writer, "; ")?;
                 match ty.size {
-                    Some(n) => write!(self.writer, "{n}")?,
-                    None => write!(self.writer, "variable-length")?,
+                    Some(n) => write!(writer, "{n}")?,
+                    None => write!(writer, "variable-length")?,
                 }
-                write!(self.writer, "]")?;
+                write!(writer, "]")?;
             }
-            SimplifiedTypeKind::Record(ty) => write!(self.writer, "{}", &ty.name)?,
-            SimplifiedTypeKind::Enum(ty) => write!(self.writer, "{}", ty.enum_name)?,
+            SimplifiedTypeKind::Record(ty) => write!(writer, "{}", &ty.name)?,
+            SimplifiedTypeKind::Enum(ty) => write!(writer, "{}", ty.enum_name)?,
             SimplifiedTypeKind::Typedef(ty) => {
-                write!(self.writer, "{}", ty.alias)?;
+                write!(writer, "{}", ty.alias)?;
             }
             SimplifiedTypeKind::Anonymous(id) => {
                 // the definition of anon types is meant to be printed somewhere else
-                write!(self.writer, "<anon{id}>")?;
+                write!(writer, "<anon{id}>")?;
             }
             SimplifiedTypeKind::Pointer(ty) => {
                 // *pointee
-                write!(self.writer, "*")?;
-                self.rec_print_type(&ty.pointee)?;
+                write!(writer, "*")?;
+                self.rec_print_type(writer, &ty.pointee)?;
             }
             SimplifiedTypeKind::StandardInt(ty) => match ty {
-                StandardIntType::IntFixed(bits) => write!(self.writer, "i{bits}")?,
-                StandardIntType::UIntFixed(bits) => write!(self.writer, "u{bits}")?,
-                StandardIntType::IntPtr => write!(self.writer, "intptr_t")?,
-                StandardIntType::UIntPtr => write!(self.writer, "uintptr_t")?,
-                StandardIntType::Size => write!(self.writer, "size_t")?,
+                StandardIntType::IntFixed(bits) => write!(writer, "i{bits}")?,
+                StandardIntType::UIntFixed(bits) => write!(writer, "u{bits}")?,
+                StandardIntType::IntPtr => write!(writer, "intptr_t")?,
+                StandardIntType::UIntPtr => write!(writer, "uintptr_t")?,
+                StandardIntType::Size => write!(writer, "size_t")?,
             },
-            SimplifiedTypeKind::OtherBasic(ty) => write!(self.writer, "{:?}", ty.0)?,
+            SimplifiedTypeKind::OtherBasic(ty) => write!(writer, "{:?}", ty.0)?,
         };
         Ok(())
     }
 }
 
-impl RustLikeTypePrinter<Vec<u8>> {
-    pub fn in_memory() -> Self {
-        Self { writer: Vec::new() }
-    }
-
-    pub fn into_string(self) -> String {
-        String::from_utf8(self.writer).unwrap()
-    }
-}
-
-impl<W: Write> TypePrinter for RustLikeTypePrinter<W> {
-    fn print_type(&mut self, t: &CType) -> anyhow::Result<()> {
-        self.rec_print_type(t)?;
-        Ok(())
+impl TypePrinter for RustLikeTypePrinter {
+    fn print_type(&mut self, writer: &mut dyn Write, t: &CType) -> anyhow::Result<()> {
+        self.rec_print_type(writer, t)
     }
 }
 
@@ -222,27 +224,11 @@ impl Display for CDeclString {
     }
 }
 
-impl<W: Write> CLikeTypePrinter<W> {
-    pub fn new(writer: W) -> Self {
-        Self { writer }
-    }
-}
-
-impl CLikeTypePrinter<Vec<u8>> {
-    pub fn in_memory() -> Self {
-        Self { writer: Vec::new() }
-    }
-
-    pub fn into_string(self) -> String {
-        String::from_utf8(self.writer).unwrap()
-    }
-}
-
-impl<W: Write> TypePrinter for CLikeTypePrinter<W> {
-    fn print_type(&mut self, t: &CType) -> anyhow::Result<()> {
+impl TypePrinter for CLikeTypePrinter {
+    fn print_type(&mut self, writer: &mut dyn Write, t: &CType) -> anyhow::Result<()> {
         let decl = CDecl::build(t)?;
         let str = decl.into_string();
-        write!(self.writer, "{str}")?;
+        write!(writer, "{str}")?;
         Ok(())
     }
 }
@@ -259,9 +245,9 @@ mod tests {
             .filter_level(log::LevelFilter::Trace)
             .try_init();
         let t = CType::new(ty.to_owned());
-        let mut printer = CLikeTypePrinter::in_memory();
-        printer.print_type(&t).expect("printing failed");
-        assert_eq!(expected, printer.into_string());
+        let mut printer = CLikeTypePrinter {};
+        let res = printer.type_to_string(&t).expect("printing failed");
+        assert_eq!(expected, res);
     }
 
     fn test_print_type_rust(expected: &str, ty: &SimplifiedTypeKind) {
@@ -269,9 +255,9 @@ mod tests {
             .filter_level(log::LevelFilter::Trace)
             .try_init();
         let t = CType::new(ty.to_owned());
-        let mut printer = RustLikeTypePrinter::in_memory();
-        printer.print_type(&t).expect("printing failed");
-        assert_eq!(expected, printer.into_string());
+        let mut printer = RustLikeTypePrinter {};
+        let res = printer.type_to_string(&t).expect("printing failed");
+        assert_eq!(expected, res);
     }
 
     #[test]

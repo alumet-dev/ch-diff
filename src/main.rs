@@ -7,7 +7,7 @@ use clap::Parser;
 use ch_diff::{
     ast::HeaderContent,
     diff::DiffReport,
-    print::{AnsiPrinter, ReportPrinter},
+    print::{AnsiPrinter, ReportPrinter, ansi::AnsiOptions, types::TypePrintingStyle},
 };
 
 fn main() {
@@ -37,13 +37,17 @@ fn main() {
         .unwrap();
 
     // print diff, the only output format that we support for now is colored ansi text
+    let options = AnsiOptions {
+        type_style: TypePrintingStyle::C,
+        print_diff_sign: false,
+    };
     match args.output {
         Some(f) => {
-            let mut printer = AnsiPrinter::create_file(f.as_path()).unwrap();
+            let mut printer = AnsiPrinter::create_file(f.as_path(), options).unwrap();
             printer.print_report(report).expect("printing error");
         }
         None => {
-            let mut printer = AnsiPrinter::to_stdout();
+            let mut printer = AnsiPrinter::to_stdout(options).unwrap();
             printer.print_report(report).expect("printing error");
         }
     }

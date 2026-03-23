@@ -1,57 +1,66 @@
 use std::{
     fmt::Display,
     fs::File,
-    io::{BufWriter, Stdout, Write},
+    io::{BufWriter, Write},
     path::Path,
 };
 
-use crate::diff::{
-    Change, ChangeBuf, ChangeKind, DeclChange, DiffReport, SourceDiff, enums::EnumChange,
-    functions::FunctionChange, structs::StructChange, variables::VarChange,
+use crate::{
+    diff::{
+        Change, ChangeBuf, ChangeKind, DeclChange, DiffReport, SourceDiff, enums::EnumChange,
+        functions::FunctionChange, structs::StructChange, variables::VarChange,
+    },
+    print::types::{CLikeTypePrinter, RustLikeTypePrinter, TypePrinter, TypePrintingStyle},
 };
 use anyhow::Context;
-use colored::{Color, ColoredString, Colorize, Style, Styles};
-use similar::{ChangeTag, DiffableStr, TextDiff};
+use colored::{Color, ColoredString, Colorize, Styles};
+use similar::{ChangeTag, TextDiff};
 
-pub struct AnsiPrinter<W: Write> {
-    writer: W,
-    // options: AnsiOptions, // TODO
+pub struct AnsiPrinter {
+    writer: Box<dyn Write>,
+    type_printer: Box<dyn TypePrinter>,
+    options: AnsiOptions,
 }
 
-// TODO
-// #[derive(Debug)]
-// pub struct AnsiOptions {
-//     pub diff_sign: bool,
-// }
+#[derive(Debug)]
+pub struct AnsiOptions {
+    pub type_style: TypePrintingStyle,
+    pub print_diff_sign: bool,
+}
 
-impl AnsiPrinter<BufWriter<File>> {
-    pub fn to_file(output: File) -> anyhow::Result<Self> {
+impl AnsiPrinter {
+    fn new(writer: impl Write + 'static, options: AnsiOptions) -> anyhow::Result<Self> {
+        let type_printer: Box<dyn TypePrinter> = match options.type_style {
+            TypePrintingStyle::C => Box::new(CLikeTypePrinter {}),
+            TypePrintingStyle::Rust => Box::new(RustLikeTypePrinter {}),
+        };
         Ok(Self {
-            writer: BufWriter::new(output),
+            writer: Box::new(writer) as _,
+            type_printer,
+            options,
         })
     }
 
-    pub fn create_file(output: &Path) -> anyhow::Result<Self> {
+    pub fn to_file(output: File, options: AnsiOptions) -> anyhow::Result<Self> {
+        Self::new(BufWriter::new(output), options)
+    }
+
+    pub fn create_file(output: &Path, options: AnsiOptions) -> anyhow::Result<Self> {
         let output = File::create(output)
             .with_context(|| format!("could not create new file {output:?}"))?;
-        Self::to_file(output)
+        Self::to_file(output, options)
     }
-}
 
-impl AnsiPrinter<BufWriter<Stdout>> {
-    pub fn to_stdout() -> Self {
-        Self {
-            writer: BufWriter::new(std::io::stdout()),
-        }
+    pub fn to_stdout(options: AnsiOptions) -> anyhow::Result<Self> {
+        Self::new(BufWriter::new(std::io::stdout()), options)
     }
 }
 
 trait Printable {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()>;
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()>;
 }
 
-
-impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
+impl super::ReportPrinter for AnsiPrinter {
     fn print_report(&mut self, report: DiffReport) -> anyhow::Result<()> {
         fn compat_color(compat: ChangeKind) -> Color {
             match compat {
@@ -62,27 +71,27 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
         }
 
         fn write_md_list<D: Display>(
-            writer: &mut impl Write,
+            p: &mut AnsiPrinter,
             iter: impl IntoIterator<Item = D>,
             color: Color,
         ) -> anyhow::Result<()> {
             let iter = iter.into_iter();
             // print each element as a md list
             for elem in iter {
-                writeln!(writer, "{}", format!("- {elem}").color(color))?;
+                writeln!(p.writer, "{}", format!("- {elem}").color(color))?;
             }
-            write!(writer, "\n")?;
+            write!(p.writer, "\n")?;
             Ok(())
         }
 
         fn write_detailed_changes<C: Change + Printable>(
-            writer: &mut impl Write,
+            p: &mut AnsiPrinter,
             changes: &ChangeBuf<C>,
         ) -> anyhow::Result<()> {
-            writeln!(writer, "\n#### Details\n")?;
+            writeln!(p.writer, "\n#### Details\n")?;
             for change in changes {
-                write!(writer, "- ")?;
-                change.print_ansi(writer)?;
+                write!(p.writer, "- ")?;
+                change.print_ansi(p)?;
             }
             Ok(())
         }
@@ -112,14 +121,14 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
             writeln!(self.writer, "∅")?;
         } else {
             write!(self.writer, "\n")?;
-            write_md_list(&mut self.writer, report.symbols.removed, Color::Red)?;
+            write_md_list(self, report.symbols.removed, Color::Red)?;
         }
         write!(self.writer, "Added symbols: ")?;
         if report.symbols.added.is_empty() {
             writeln!(self.writer, "∅")?;
         } else {
             write!(self.writer, "\n")?;
-            write_md_list(&mut self.writer, report.symbols.added, Color::Green)?;
+            write_md_list(self, report.symbols.added, Color::Green)?;
         }
 
         // global vars
@@ -129,7 +138,7 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
         for (i, change) in report.global_vars.changes.into_iter().enumerate() {
             let n = i + 1;
             writeln!(self.writer, "### {n}. {}", change.var_name())?;
-            change.print_ansi(&mut self.writer)?;
+            change.print_ansi(self)?;
         }
 
         // functions
@@ -145,8 +154,8 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
                 }
                 DeclChange::Changed(diff) => {
                     writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(&mut self.writer)?;
-                    write_detailed_changes(&mut self.writer, &diff.changes)?;
+                    diff.source_diff.print_ansi(self)?;
+                    write_detailed_changes(self, &diff.changes)?;
                 }
             }
         }
@@ -164,8 +173,8 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
                 }
                 DeclChange::Changed(diff) => {
                     writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(&mut self.writer)?;
-                    write_detailed_changes(&mut self.writer, &diff.changes)?;
+                    diff.source_diff.print_ansi(self)?;
+                    write_detailed_changes(self, &diff.changes)?;
                 }
             }
         }
@@ -183,8 +192,22 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
                 }
                 DeclChange::Changed(diff) => {
                     writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(&mut self.writer)?;
-                    write_detailed_changes(&mut self.writer, &diff.changes)?;
+                    diff.source_diff.print_ansi(self)?;
+                    write_detailed_changes(self, &diff.changes)?;
+
+                    // After the details of each change, print the definition of anonymous members, if any.
+                    if !diff.old_anon.is_empty() {
+                        writeln!(self.writer, "\nwhere (old anonymous members):")?;
+                        for (anon_id, anon_def) in diff.old_anon.iter() {
+                            writeln!(self.writer, "- <anon{anon_id}>: {anon_def}")?;
+                        }
+                    }
+                    if !diff.new_anon.is_empty() {
+                        writeln!(self.writer, "\nwhere (new anonymous members):")?;
+                        for (anon_id, anon_def) in diff.new_anon.iter() {
+                            writeln!(self.writer, "- <anon{anon_id}>: {anon_def}")?;
+                        }
+                    }
                 }
             }
         }
@@ -202,8 +225,8 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
                 }
                 DeclChange::Changed(diff) => {
                     writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(&mut self.writer)?;
-                    write_detailed_changes(&mut self.writer, &diff.changes)?;
+                    diff.source_diff.print_ansi(self)?;
+                    write_detailed_changes(self, &diff.changes)?;
                 }
             }
         }
@@ -212,28 +235,30 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
 }
 
 impl Printable for VarChange {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         match self {
             VarChange::TypeChanged {
                 old_typ, new_typ, ..
             } => {
+                let old_typ = p.type_printer.type_to_string(old_typ)?;
+                let new_typ = p.type_printer.type_to_string(new_typ)?;
                 writeln!(
-                    writer,
+                    p.writer,
                     "type changed:\n{}\n{}",
-                    format!("- {}", old_typ.clang_display_name()).red(),
-                    format!("+ {}", new_typ.clang_display_name()).green()
+                    format!("- {}", old_typ).red(),
+                    format!("+ {}", new_typ).green()
                 )?;
             }
             VarChange::Added(node) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "added variable: {}",
                     format!("+ {}", node.payload).green()
                 )?;
             }
             VarChange::Removed(node) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "removed variable: {}",
                     format!("- {}", node.payload).red()
                 )?;
@@ -244,24 +269,26 @@ impl Printable for VarChange {
 }
 
 impl Printable for FunctionChange {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         match self {
             FunctionChange::ParameterRenamed {
                 old_name, new_name, ..
             } => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "parameter renamed: {} -> {}",
                     old_name.red(),
                     new_name.green()
                 )?;
             }
             FunctionChange::ReturnTypeChanged { old_typ, new_typ } => {
+                let old_typ = p.type_printer.type_to_string(old_typ)?;
+                let new_typ = p.type_printer.type_to_string(new_typ)?;
                 writeln!(
-                    writer,
+                    p.writer,
                     "return type changed: {} -> {}",
-                    format!("{old_typ:?}").red(),
-                    format!("{new_typ:?}").green()
+                    format!("{old_typ}").red(),
+                    format!("{new_typ}").green()
                 )?;
             }
             FunctionChange::ParameterTypeChanged {
@@ -270,23 +297,25 @@ impl Printable for FunctionChange {
                 old_typ,
                 new_typ,
             } => {
+                let old_typ = p.type_printer.type_to_string(old_typ)?;
+                let new_typ = p.type_printer.type_to_string(new_typ)?;
                 writeln!(
-                    writer,
+                    p.writer,
                     "type of {name} changed: {} -> {}",
-                    format!("{old_typ:?}").red(),
-                    format!("{new_typ:?}").green()
+                    format!("{old_typ}").red(),
+                    format!("{new_typ}").green()
                 )?;
             }
             FunctionChange::ParameterRemoved(arg) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "parameter removed: {}",
                     format!("{:?}", arg.name).red(),
                 )?;
             }
             FunctionChange::ParameterAdded(arg) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "parameter added: {}",
                     format!("{:?}", arg.name).red(),
                 )?;
@@ -297,11 +326,11 @@ impl Printable for FunctionChange {
 }
 
 impl Printable for EnumChange {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         match self {
             EnumChange::ValueAdded(node) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "value added: {}",
                     format!("{:?}", node.name).green(),
                 )?;
@@ -312,7 +341,7 @@ impl Printable for EnumChange {
                 value: _,
             } => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "value renamed: {} -> {}",
                     old_name.red(),
                     new_name.green()
@@ -320,17 +349,19 @@ impl Printable for EnumChange {
             }
             EnumChange::ValueRemoved(node) => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "value removed: {}",
                     format!("{:?}", node.name).red(),
                 )?;
             }
             EnumChange::TypeChanged { old, new } => {
+                let old_typ = p.type_printer.type_to_string(old)?;
+                let new_typ = p.type_printer.type_to_string(new)?;
                 writeln!(
-                    writer,
+                    p.writer,
                     "enum type changed: {} -> {}",
-                    format!("{old:?}").red(),
-                    format!("{new:?}").green(),
+                    format!("{old_typ}").red(),
+                    format!("{new_typ}").green(),
                 )?;
             }
         };
@@ -339,11 +370,11 @@ impl Printable for EnumChange {
 }
 
 impl Printable for StructChange {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         match self {
             StructChange::SizeDiff { old_size, new_size } => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "struct size changed: {} -> {} bytes",
                     format!("{old_size}").red(),
                     format!("{new_size}").green(),
@@ -355,18 +386,18 @@ impl Printable for StructChange {
                 field: _,
             } => {
                 writeln!(
-                    writer,
+                    p.writer,
                     "field renamed: {} -> {}",
                     format!("{old_name}").red(),
                     format!("{new_name}").green(),
                 )?;
             }
             StructChange::FieldChanged { name, old, new } => {
-                writeln!(writer, "field changed: `{name}`:")?;
+                writeln!(p.writer, "field changed: `{name}`:")?;
 
                 // offset
-                write!(writer, "\toffset: ")?;
-                InlineDiff(old.offset, new.offset).print_ansi(writer)?;
+                write!(p.writer, "\toffset: ")?;
+                InlineDiff(old.offset, new.offset).print_ansi(p)?;
 
                 // bit field width
                 let old_width = old
@@ -377,29 +408,30 @@ impl Printable for StructChange {
                     .bit_field_width
                     .map(|s| s.to_string())
                     .unwrap_or("none".to_owned());
-                write!(writer, "\n\tbit_field_width: ")?;
-                InlineDiff(old_width, new_width).print_ansi(writer)?;
+                write!(p.writer, "\n\tbit_field_width: ")?;
+                InlineDiff(old_width, new_width).print_ansi(p)?;
 
                 // type
-                write!(writer, "\n\ttype: ")?;
-                InlineDiff(&old.typ.clang_display_name(), &new.typ.clang_display_name())
-                    .print_ansi(writer)?;
-                write!(writer, "\n")?;
+                write!(p.writer, "\n\ttype: ")?;
+                let old_typ = p.type_printer.type_to_string(&old.typ)?;
+                let new_typ = p.type_printer.type_to_string(&new.typ)?;
+                InlineDiff(old_typ, new_typ).print_ansi(p)?;
+                write!(p.writer, "\n")?;
             }
             StructChange::FieldAdded(node) => {
-                writeln!(writer, "field added: {}", node.name.green())?;
+                writeln!(p.writer, "field added: {}", node.name.green())?;
             }
             StructChange::FieldRemoved(node) => {
-                writeln!(writer, "field removed: {}", node.name.red())?;
+                writeln!(p.writer, "field removed: {}", node.name.red())?;
             }
             StructChange::FieldMoved {
                 name,
                 old_offset,
                 new_offset,
             } => {
-                write!(writer, "field moved: `{name}`: ")?;
-                InlineDiff(old_offset, new_offset).print_ansi(writer)?;
-                write!(writer, "\n")?;
+                write!(p.writer, "field moved: `{name}`: ")?;
+                InlineDiff(old_offset, new_offset).print_ansi(p)?;
+                write!(p.writer, "\n")?;
             }
         };
         Ok(())
@@ -407,7 +439,7 @@ impl Printable for StructChange {
 }
 
 impl Printable for SourceDiff {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         // compute diff
         let diff = TextDiff::from_lines(&self.old, &self.new);
 
@@ -419,7 +451,9 @@ impl Printable for SourceDiff {
                     ChangeTag::Insert => ("+".green(), Styles::Clear, Some(Color::Green)),
                     ChangeTag::Equal => (" ".into(), Styles::Dimmed, None),
                 };
-                // write!(writer, "{sign}")?; // TODO configurable
+                if p.options.print_diff_sign {
+                    write!(p.writer, "{sign}")?;
+                }
                 // todo line number?
                 for (emphasized, value) in change.iter_strings_lossy() {
                     let mut s = ColoredString::from(value.as_ref());
@@ -427,19 +461,19 @@ impl Printable for SourceDiff {
                         s.style |= style;
                         s = s.color(color.unwrap());
                         s = s.underline();
-                        write!(writer, "{s}")?;
+                        write!(p.writer, "{s}")?;
                     } else {
                         let s = if let Some(color) = color {
                             s.color(color)
                         } else {
                             s
                         };
-                        write!(writer, "{s}")?;
+                        write!(p.writer, "{s}")?;
                     }
                 }
             }
         }
-        write!(writer, "\n")?;
+        write!(p.writer, "\n")?;
         Ok(())
     }
 }
@@ -447,14 +481,14 @@ impl Printable for SourceDiff {
 struct InlineDiff<D: Display + PartialEq>(D, D);
 
 impl<D: Display + PartialEq> Printable for InlineDiff<D> {
-    fn print_ansi(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
         let InlineDiff(old, new) = self;
         if old == new {
-            write!(writer, "{old}")?;
+            write!(p.writer, "{old}")?;
         } else {
             let old_red = old.to_string().red();
             let new_green = new.to_string().green();
-            write!(writer, "{old_red} -> {new_green}")?;
+            write!(p.writer, "{old_red} -> {new_green}")?;
         }
         Ok(())
     }
