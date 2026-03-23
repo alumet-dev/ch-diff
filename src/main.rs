@@ -38,7 +38,7 @@ fn main() {
 
     // print diff, the only output format that we support for now is colored ansi text
     let options = AnsiOptions {
-        type_style: TypePrintingStyle::C,
+        type_style: args.types,
         print_diff_sign: false,
     };
     match args.output {
@@ -73,4 +73,8 @@ struct Args {
     /// Output file. By default, we print to stdout.
     #[arg(long, short)]
     output: Option<PathBuf>,
+
+    /// How to print types in the report.
+    #[arg(long, default_value_t = TypePrintingStyle::Rust)]
+    types: TypePrintingStyle,
 }

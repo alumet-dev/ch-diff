@@ -3,6 +3,7 @@
 use std::{borrow::Cow, fmt::Display, fmt::Write};
 
 use anyhow::Context;
+use derive_more::Display;
 use itertools::Itertools;
 
 use crate::ast::c_type::{CType, SimplifiedTypeKind, stdint::StandardIntType};
@@ -21,7 +22,7 @@ pub trait TypePrinter {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, clap::ValueEnum, Display)]
 pub enum TypePrintingStyle {
     C,
     Rust,
