@@ -2,7 +2,7 @@
 //! - warning: field renamed, typedef change but equivalent underlying type
 //! - breaking: field removed, field added, field change (same name, different type)
 
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
     ast::{
@@ -12,6 +12,8 @@ use crate::{
     },
     diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
+
+use super::SourceDiffStyle;
 
 pub struct StructDiff {
     pub changes: ChangeBuf<StructChange>,
@@ -160,6 +162,7 @@ impl StructDiff {
                 source_diff: SourceDiff {
                     old: a.to_string(),
                     new: b.to_string(),
+                    style: SourceDiffStyle::Multiline,
                 },
                 new_anon: a.anonymous.clone(),
                 old_anon: b.anonymous.clone(),

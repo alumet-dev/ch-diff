@@ -12,6 +12,8 @@ use crate::{
     diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
 };
 
+use super::SourceDiffStyle;
+
 pub struct EnumDiff {
     pub changes: ChangeBuf<EnumChange>,
     pub source_diff: SourceDiff,
@@ -94,6 +96,7 @@ impl EnumDiff {
                 source_diff: SourceDiff {
                     old: normalize_enum_for_diff(a),
                     new: normalize_enum_for_diff(b),
+                    style: SourceDiffStyle::Multiline,
                 },
             }))
         }

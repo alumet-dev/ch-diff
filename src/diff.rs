@@ -266,4 +266,11 @@ impl DiffReport {
 pub struct SourceDiff {
     pub old: String,
     pub new: String,
+    pub style: SourceDiffStyle,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum SourceDiffStyle {
+    Multiline,
+    Split1v1,
 }

@@ -6,7 +6,9 @@ use itertools::{EitherOrBoth, Itertools};
 
 use crate::{
     ast::c_union::CUnion,
-    diff::{ChangeBuf, ChangeContainer, ChangeKind, SourceDiff, structs::StructChange},
+    diff::{
+        ChangeBuf, ChangeContainer, ChangeKind, SourceDiff, SourceDiffStyle, structs::StructChange,
+    },
 };
 
 pub struct UnionDiff {
@@ -77,6 +79,7 @@ impl UnionDiff {
                 source_diff: SourceDiff {
                     old: a.to_string(),
                     new: b.to_string(),
+                    style: SourceDiffStyle::Multiline,
                 },
             }))
         }

@@ -9,7 +9,7 @@ use crate::{
         c_function::{CFunction, FunctionArg},
         c_type::{CType, CTypeComparison},
     },
-    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff, SourceDiffStyle},
 };
 
 pub struct FunctionDiff {
@@ -130,6 +130,7 @@ impl FunctionDiff {
                 source_diff: SourceDiff {
                     old: a.to_string(),
                     new: b.to_string(),
+                    style: SourceDiffStyle::Split1v1,
                 },
             }))
         }

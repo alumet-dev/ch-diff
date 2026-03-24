@@ -7,17 +7,17 @@ use std::{
 
 use crate::{
     diff::{
-        Change, ChangeBuf, ChangeKind, DeclChange, DiffReport, SourceDiff, enums::EnumChange,
-        functions::FunctionChange, structs::StructChange, variables::VarChange,
+        Change, ChangeBuf, ChangeKind, DeclChange, DiffReport, SourceDiff, SourceDiffStyle,
+        enums::EnumChange, functions::FunctionChange, structs::StructChange, variables::VarChange,
     },
     print::types::{CLikeTypePrinter, RustLikeTypePrinter, TypePrinter, TypePrintingStyle},
 };
 use anyhow::Context;
 use colored::{Color, ColoredString, Colorize, Styles};
-use similar::{ChangeTag, TextDiff};
+use similar::{ChangeTag, TextDiff, TextDiffConfig};
 
-pub struct AnsiPrinter {
-    writer: Box<dyn Write>,
+pub struct AnsiPrinter<W: Write> {
+    writer: W,
     type_printer: Box<dyn TypePrinter>,
     options: AnsiOptions,
 }
@@ -28,19 +28,25 @@ pub struct AnsiOptions {
     pub print_diff_sign: bool,
 }
 
-impl AnsiPrinter {
-    fn new(writer: impl Write + 'static, options: AnsiOptions) -> anyhow::Result<Self> {
+impl<W: Write> AnsiPrinter<W> {
+    fn new(writer: W, options: AnsiOptions) -> anyhow::Result<Self> {
         let type_printer: Box<dyn TypePrinter> = match options.type_style {
             TypePrintingStyle::C => Box::new(CLikeTypePrinter {}),
             TypePrintingStyle::Rust => Box::new(RustLikeTypePrinter {}),
         };
         Ok(Self {
-            writer: Box::new(writer) as _,
+            writer,
             type_printer,
             options,
         })
     }
 
+    pub fn into_inner(self) -> W {
+        self.writer
+    }
+}
+
+impl AnsiPrinter<BufWriter<File>> {
     pub fn to_file(output: File, options: AnsiOptions) -> anyhow::Result<Self> {
         Self::new(BufWriter::new(output), options)
     }
@@ -50,17 +56,19 @@ impl AnsiPrinter {
             .with_context(|| format!("could not create new file {output:?}"))?;
         Self::to_file(output, options)
     }
+}
 
+impl AnsiPrinter<std::io::Stdout> {
     pub fn to_stdout(options: AnsiOptions) -> anyhow::Result<Self> {
-        Self::new(BufWriter::new(std::io::stdout()), options)
+        Self::new(std::io::stdout(), options)
     }
 }
 
 trait Printable {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()>;
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()>;
 }
 
-impl super::ReportPrinter for AnsiPrinter {
+impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
     fn print_report(&mut self, report: DiffReport) -> anyhow::Result<()> {
         fn compat_color(compat: ChangeKind) -> Color {
             match compat {
@@ -70,8 +78,8 @@ impl super::ReportPrinter for AnsiPrinter {
             }
         }
 
-        fn write_md_list<D: Display>(
-            p: &mut AnsiPrinter,
+        fn write_md_list<W: Write, D: Display>(
+            p: &mut AnsiPrinter<W>,
             iter: impl IntoIterator<Item = D>,
             color: Color,
         ) -> anyhow::Result<()> {
@@ -84,8 +92,8 @@ impl super::ReportPrinter for AnsiPrinter {
             Ok(())
         }
 
-        fn write_detailed_changes<C: Change + Printable>(
-            p: &mut AnsiPrinter,
+        fn write_detailed_changes<W: Write, C: Change + Printable>(
+            p: &mut AnsiPrinter<W>,
             changes: &ChangeBuf<C>,
         ) -> anyhow::Result<()> {
             writeln!(p.writer, "\n#### Details\n")?;
@@ -253,7 +261,7 @@ impl super::ReportPrinter for AnsiPrinter {
 }
 
 impl Printable for VarChange {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             VarChange::TypeChanged {
                 old_typ, new_typ, ..
@@ -287,7 +295,7 @@ impl Printable for VarChange {
 }
 
 impl Printable for FunctionChange {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             FunctionChange::ParameterRenamed {
                 old_name, new_name, ..
@@ -344,7 +352,7 @@ impl Printable for FunctionChange {
 }
 
 impl Printable for EnumChange {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             EnumChange::ValueAdded(node) => {
                 writeln!(
@@ -388,7 +396,7 @@ impl Printable for EnumChange {
 }
 
 impl Printable for StructChange {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             StructChange::SizeDiff { old_size, new_size } => {
                 writeln!(
@@ -457,7 +465,7 @@ impl Printable for StructChange {
 }
 
 impl Printable for SourceDiff {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         // compute diff
         let diff = TextDiff::from_lines(&self.old, &self.new);
 
@@ -489,6 +497,9 @@ impl Printable for SourceDiff {
                         write!(p.writer, "{s}")?;
                     }
                 }
+                if self.style == SourceDiffStyle::Split1v1 {
+                    write!(p.writer, "\n")?;
+                }
             }
         }
         write!(p.writer, "\n")?;
@@ -499,7 +510,7 @@ impl Printable for SourceDiff {
 struct InlineDiff<D: Display + PartialEq>(D, D);
 
 impl<D: Display + PartialEq> Printable for InlineDiff<D> {
-    fn print_ansi(&self, p: &mut AnsiPrinter) -> anyhow::Result<()> {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         let InlineDiff(old, new) = self;
         if old == new {
             write!(p.writer, "{old}")?;
@@ -509,5 +520,62 @@ impl<D: Display + PartialEq> Printable for InlineDiff<D> {
             write!(p.writer, "{old_red} -> {new_green}")?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+
+    use super::*;
+
+    pub fn print_to_string(options: AnsiOptions, object: impl Printable) -> anyhow::Result<String> {
+        let mut buf: Vec<u8> = Vec::new();
+        let mut printer = AnsiPrinter::new(buf, options).context("printer construction error")?;
+        object.print_ansi(&mut printer).context("printing error")?;
+        buf = printer.into_inner();
+        let str =
+            String::from_utf8(buf).context("the printer produced invalid utf-8 characters")?;
+        Ok(str)
+    }
+
+    #[test]
+    fn print_source_diff_multiline() {
+        let diff = SourceDiff {
+            old: indoc! {"construct {
+                a: u8
+                b: u16
+                c: what
+            }"}
+            .to_string(),
+            new: indoc! {"construct {
+                a: u8
+                c: watt-hour
+                d: zzz
+            }"}
+            .to_string(),
+            style: SourceDiffStyle::Multiline,
+        };
+        let options = AnsiOptions {
+            type_style: TypePrintingStyle::Rust,
+            print_diff_sign: false,
+        };
+        let printed = print_to_string(options, diff).unwrap();
+        println!("{}", printed);
+    }
+
+    #[test]
+    fn print_source_diff_inline() {
+        let diff = SourceDiff {
+            old: indoc! {"fn f(a: u8, b: u16, c: what) -> R"}.to_string(),
+            new: indoc! {"fn f(a: u8, c: watt-hour, d: zzz) -> R"}.to_string(),
+            style: SourceDiffStyle::Split1v1,
+        };
+        let options = AnsiOptions {
+            type_style: TypePrintingStyle::Rust,
+            print_diff_sign: false,
+        };
+        let printed = print_to_string(options, diff).unwrap();
+        println!("{}", printed);
     }
 }
