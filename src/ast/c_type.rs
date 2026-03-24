@@ -1,6 +1,3 @@
-use core::fmt;
-use std::fmt::Display;
-
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind, Type, TypeKind};
 

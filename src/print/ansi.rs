@@ -14,7 +14,7 @@ use crate::{
 };
 use anyhow::Context;
 use colored::{Color, ColoredString, Colorize, Styles};
-use similar::{ChangeTag, TextDiff, TextDiffConfig};
+use similar::{ChangeTag, TextDiff};
 
 pub struct AnsiPrinter<W: Write> {
     writer: W,

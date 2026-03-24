@@ -1,8 +1,8 @@
 //! Simplified AST.
 
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
 
-use clang::{Clang, Entity, EntityKind, Index, TranslationUnit};
+use clang::{Entity, EntityKind, TranslationUnit};
 
 use crate::ast::{
     c_enum::CEnum, c_function::CFunction, c_opaque::OpaqueDecl, c_struct::CStruct,
