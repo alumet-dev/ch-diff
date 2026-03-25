@@ -6,7 +6,7 @@ use clap::Parser;
 
 use ch_diff::{
     ast::HeaderContent,
-    diff::DiffReport,
+    diff::{DiffReport, filter::DiffFilter},
     print::{AnsiPrinter, ReportPrinter, ansi::AnsiOptions, types::TypePrintingStyle},
 };
 
@@ -26,8 +26,14 @@ fn main() {
     let old_name = args.old_file.to_str().unwrap();
     let new_name = args.new_file.to_str().unwrap();
 
+    // configure filter
+    let filter = match args.whitelist {
+        Some(path) => DiffFilter::parse_whitelist_file(path).expect("filter initialisation failed"),
+        None => DiffFilter::allow_everything(),
+    };
+
     // compute diff
-    let report = DiffReport::compute_diff((old_name, &old_header), (new_name, &new_header))
+    let report = DiffReport::compute_diff((old_name, &old_header), (new_name, &new_header), filter)
         .with_context(|| {
             format!(
                 "failed to compute diff between {:?} and {:?}",
@@ -77,4 +83,10 @@ struct Args {
     /// How to print types in the report.
     #[arg(long, default_value = "rust")]
     types: TypePrintingStyle,
+
+    /// Path to the whitelist file.
+    ///
+    /// Only the names (one per line) contained in this file will show up in the report.
+    #[arg(long)]
+    whitelist: Option<PathBuf>,
 }

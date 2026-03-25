@@ -4,7 +4,7 @@ use crate::{
         c_type::{CType, CTypeComparison},
         c_var::CVar,
     },
-    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind},
+    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, filter::DiffFilter},
 };
 
 pub struct GlobalVarDiff {
@@ -51,11 +51,18 @@ impl Change for VarChange {
 }
 
 impl GlobalVarDiff {
-    pub fn compute_diff(a: &HeaderContent, b: &HeaderContent) -> anyhow::Result<Self> {
+    pub fn compute_diff(
+        a: &HeaderContent,
+        b: &HeaderContent,
+        filter: &DiffFilter,
+    ) -> anyhow::Result<Self> {
         let mut changes = ChangeBuf::new();
 
         // check existing variables
         for (name, var_a) in a.global_variables.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.global_variables.get(name) {
                 Some(var_b) => {
                     if var_a.payload.typ != var_b.payload.typ {
@@ -72,6 +79,9 @@ impl GlobalVarDiff {
 
         // detect new variables
         for (name, var_b) in b.global_variables.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             if !a.global_variables.contains_key(name) {
                 changes.push(VarChange::Added(var_b.to_owned()));
             }

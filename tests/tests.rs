@@ -6,7 +6,7 @@ use ch_diff::{
         c_opaque::OpaqueDeclKind,
         c_type::{BasicType, SimplifiedTypeKind, stdint::StandardIntType},
     },
-    diff::DiffReport,
+    diff::{DiffReport, filter::DiffFilter},
 };
 use clang::{Clang, EntityKind, Index};
 use pretty_assertions::assert_eq;
@@ -185,7 +185,8 @@ fn diff_structs() {
 
     let h1 = HeaderContent::analyse(tu1).unwrap();
     let h2 = HeaderContent::analyse(tu2).unwrap();
-    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2)).unwrap();
+    let filter = DiffFilter::allow_everything();
+    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2), filter).unwrap();
     assert!(diff.global_vars.is_empty());
     assert!(diff.enums.is_empty());
     assert!(!diff.structs.is_empty());
@@ -214,7 +215,8 @@ fn diff_structs_hard() {
 
     let h1 = HeaderContent::analyse(tu1).unwrap();
     let h2 = HeaderContent::analyse(tu2).unwrap();
-    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2)).unwrap();
+    let filter = DiffFilter::allow_everything();
+    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2), filter).unwrap();
     assert!(diff.global_vars.is_empty());
     assert!(diff.enums.is_empty());
     assert!(!diff.structs.is_empty());

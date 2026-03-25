@@ -5,12 +5,14 @@ use anyhow::Context;
 use crate::{
     ast::HeaderContent,
     diff::{
-        enums::EnumDiff, functions::FunctionDiff, opaque::OpaqueDiff, structs::StructDiff,
-        symbols::ExportedSymbolsDiff, unions::UnionDiff, variables::GlobalVarDiff,
+        enums::EnumDiff, filter::DiffFilter, functions::FunctionDiff, opaque::OpaqueDiff,
+        structs::StructDiff, symbols::ExportedSymbolsDiff, unions::UnionDiff,
+        variables::GlobalVarDiff,
     },
 };
 
 pub mod enums;
+pub mod filter;
 pub mod functions;
 pub mod opaque;
 pub mod structs;
@@ -140,17 +142,21 @@ impl DiffReport {
     pub fn compute_diff(
         a: (&str, &HeaderContent),
         b: (&str, &HeaderContent),
+        filter: DiffFilter,
     ) -> anyhow::Result<DiffReport> {
         let (old_name, a) = a;
         let (new_name, b) = b;
 
         // vars
-        let global_vars = GlobalVarDiff::compute_diff(a, b)
+        let global_vars = GlobalVarDiff::compute_diff(a, b, &filter)
             .context("could not compute the difference in global variables")?;
 
         // enums
         let mut enums = BTreeMap::new();
         for (name, node) in a.enums.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.enums.get(name) {
                 Some(new_node) => {
                     if let Some(diff) = EnumDiff::compute_diff(&node.payload, &new_node.payload)? {
@@ -166,6 +172,9 @@ impl DiffReport {
         // structs
         let mut structs = BTreeMap::new();
         for (name, node) in a.structs.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.structs.get(name) {
                 Some(new_node) => {
                     if let Some(diff) = StructDiff::compute_diff(&node.payload, &new_node.payload)?
@@ -182,6 +191,9 @@ impl DiffReport {
         // unions
         let mut unions = BTreeMap::new();
         for (name, node) in a.unions.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.unions.get(name) {
                 Some(new_node) => {
                     if let Some(diff) = UnionDiff::compute_diff(&node.payload, &new_node.payload)? {
@@ -197,6 +209,9 @@ impl DiffReport {
         // functions
         let mut functions = BTreeMap::new();
         for (name, node) in a.functions.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.functions.get(name) {
                 Some(new_node) => {
                     if let Some(diff) =
@@ -214,6 +229,9 @@ impl DiffReport {
         // opaque declarations
         let mut opaques = BTreeMap::new();
         for (name, node) in a.opaques.iter() {
+            if !filter.accepts(name) {
+                continue;
+            }
             match b.opaques.get(name) {
                 Some(new_node) => {
                     if let Some(diff) = OpaqueDiff::compute_diff(&node.payload, &new_node.payload)?
@@ -228,7 +246,7 @@ impl DiffReport {
         }
 
         // public symbols (functions and variables)
-        let symbols = ExportedSymbolsDiff::compute_diff(a, b)
+        let symbols = ExportedSymbolsDiff::compute_diff(a, b, &filter)
             .context("failed to compute ExportedSymbolsDiff")?;
 
         Ok(DiffReport {
