@@ -3,9 +3,10 @@
 use std::{borrow::Cow, fmt::Display, fmt::Write};
 
 use anyhow::Context;
+use clang::TypeKind;
 use itertools::Itertools;
 
-use crate::ast::c_type::{CType, SimplifiedTypeKind, stdint::StandardIntType};
+use crate::ast::c_type::{BasicType, CType, SimplifiedTypeKind, stdint::StandardIntType};
 
 /// Trait for printing types.
 pub trait TypePrinter {
@@ -70,7 +71,13 @@ impl RustLikeTypePrinter {
                 StandardIntType::UIntPtr => write!(writer, "uintptr_t")?,
                 StandardIntType::Size => write!(writer, "size_t")?,
             },
-            SimplifiedTypeKind::OtherBasic(ty) => write!(writer, "{:?}", ty.0)?,
+            SimplifiedTypeKind::OtherBasic(BasicType(TypeKind::CharS | TypeKind::CharU)) => {
+                write!(writer, "c_char")?;
+            }
+            SimplifiedTypeKind::OtherBasic(ty) => {
+                let name = format!("{:?}", ty.0).to_lowercase();
+                write!(writer, "c_{name}")?
+            }
         };
         Ok(())
     }
@@ -141,8 +148,11 @@ impl CDecl {
                 };
                 self.basic_type = name;
             }
+            SimplifiedTypeKind::OtherBasic(BasicType(TypeKind::CharS | TypeKind::CharU)) => {
+                self.basic_type = String::from("char");
+            }
             SimplifiedTypeKind::OtherBasic(ty) => {
-                self.basic_type = format!("{ty:?}").to_lowercase();
+                self.basic_type = format!("{:?}", ty.0).to_lowercase();
             }
         };
         Ok(())
@@ -235,7 +245,7 @@ impl TypePrinter for CLikeTypePrinter {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::c_type::{ArrayType, PointerType};
+    use crate::ast::c_type::{ArrayType, BasicType, PointerType};
 
     use super::*;
     use pretty_assertions::assert_eq;
@@ -265,6 +275,14 @@ mod tests {
         let ty = SimplifiedTypeKind::StandardInt(StandardIntType::UIntFixed(8));
         test_print_type_c("uint8_t", &ty);
         test_print_type_rust("u8", &ty);
+
+        let ty = SimplifiedTypeKind::OtherBasic(BasicType(clang::TypeKind::CharS));
+        test_print_type_c("char", &ty);
+        test_print_type_rust("c_char", &ty);
+
+        let ty = SimplifiedTypeKind::OtherBasic(BasicType(clang::TypeKind::Int));
+        test_print_type_c("int", &ty);
+        test_print_type_rust("c_int", &ty);
     }
 
     #[test]

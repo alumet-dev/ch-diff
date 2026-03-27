@@ -43,10 +43,10 @@ impl CEnum {
                 let (v_signed, v_unsigned) = item.get_enum_constant_value().unwrap();
                 let value = match &underlying_type.kind {
                     SimplifiedTypeKind::OtherBasic(BasicType(
-                        TypeKind::UShort | TypeKind::UInt | TypeKind::ULong,
+                        TypeKind::UShort | TypeKind::UInt | TypeKind::ULong | TypeKind::CharU,
                     )) => Value::Unsigned(v_unsigned),
                     SimplifiedTypeKind::OtherBasic(BasicType(
-                        TypeKind::Short | TypeKind::Int | TypeKind::Long,
+                        TypeKind::Short | TypeKind::Int | TypeKind::Long | TypeKind::CharS,
                     )) => Value::Signed(v_signed),
                     SimplifiedTypeKind::StandardInt(i) => {
                         if i.is_signed() {
