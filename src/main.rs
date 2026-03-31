@@ -7,6 +7,7 @@ use clap::Parser;
 use ch_diff::{
     ast::Header,
     diff::{filter::DiffFilter, report::DiffReport},
+    generate::{CodeGenerator, CodeVersion, CodegenOptions},
     print::{AnsiPrinter, ReportPrinter, ansi::AnsiOptions, types::TypePrintingStyle},
 };
 
@@ -48,12 +49,21 @@ fn main() {
     match args.output {
         Some(f) => {
             let mut printer = AnsiPrinter::create_file(f.as_path(), options).unwrap();
-            printer.print_report(report).expect("printing error");
+            printer.print_report(&report).expect("printing error");
         }
         None => {
             let mut printer = AnsiPrinter::to_stdout(options).unwrap();
-            printer.print_report(report).expect("printing error");
+            printer.print_report(&report).expect("printing error");
         }
+    }
+
+    // print code
+    let options = CodegenOptions {
+        version: args.codegen_version.unwrap_or(CodeVersion::Old),
+    };
+    if let Some(f) = args.codegen_output {
+        let mut generator = CodeGenerator::create_file(f.as_path(), options).unwrap();
+        generator.generate_code(&report).expect("codegen error");
     }
 }
 
@@ -65,9 +75,17 @@ struct Args {
     /// New version of the C header.
     new_file: PathBuf,
 
-    /// Output file. By default, we print to stdout.
+    /// Report output file. By default, we print to stdout.
     #[arg(long, short)]
     output: Option<PathBuf>,
+
+    /// Version to output if codegen is enabled.
+    #[arg(long)]
+    codegen_version: Option<CodeVersion>,
+
+    /// Code output file. By default, codegen is disabled.
+    #[arg(long)]
+    codegen_output: Option<PathBuf>,
 
     /// How to print types in the report.
     #[arg(long, default_value = "rust")]

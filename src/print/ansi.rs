@@ -74,7 +74,7 @@ trait Printable {
 }
 
 impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
-    fn print_report(&mut self, report: DiffReport) -> anyhow::Result<()> {
+    fn print_report(&mut self, report: &DiffReport) -> anyhow::Result<()> {
         fn compat_color(compat: Compatibility) -> Color {
             match compat {
                 Compatibility::BackwardCompatible => Color::Green,
@@ -122,14 +122,14 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
             writeln!(self.writer, "∅")?;
         } else {
             writeln!(self.writer)?;
-            write_md_list(self, report.symbols.removed, Color::Red)?;
+            write_md_list(self, &report.symbols.removed, Color::Red)?;
         }
         write!(self.writer, "Added symbols: ")?;
         if report.symbols.added.is_empty() {
             writeln!(self.writer, "∅")?;
         } else {
             writeln!(self.writer)?;
-            write_md_list(self, report.symbols.added, Color::Green)?;
+            write_md_list(self, &report.symbols.added, Color::Green)?;
         }
 
         // declarations diff
