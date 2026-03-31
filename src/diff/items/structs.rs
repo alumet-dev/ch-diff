@@ -93,8 +93,8 @@ impl StructDiff {
                     // compare field_a and field_b
                     let typ_a = (&field_a.payload.typ, &field_a.payload.bit_field_width);
                     let typ_b = (&field_b.payload.typ, &field_b.payload.bit_field_width);
-                    let name_a = &field_a.name;
-                    let name_b = &field_b.name;
+                    let name_a = &field_a.meta.name;
+                    let name_b = &field_b.meta.name;
 
                     match (typ_a == typ_b, name_a == name_b) {
                         (true, true) => {
@@ -119,14 +119,14 @@ impl StructDiff {
                         }
                         (false, false) => {
                             // different type and name, they are probably completely unrelated
-                            removed.insert(field_a.name.clone(), field_a.to_owned());
+                            removed.insert(field_a.meta.name.clone(), field_a.to_owned());
                             changes.push(StructChange::FieldAdded(field_b.to_owned()));
                         }
                     }
                 }
                 None => {
                     // this offset no longer exists, the field has been removed
-                    removed.insert(field_a.name.clone(), field_a.to_owned());
+                    removed.insert(field_a.meta.name.clone(), field_a.to_owned());
                 }
             }
         }
@@ -134,13 +134,13 @@ impl StructDiff {
         // check new fields
         for (offset_b, field_b) in b.fields.iter() {
             if !a.fields.contains_key(offset_b) {
-                if let Some(field_a) = removed.remove(&field_b.name)
+                if let Some(field_a) = removed.remove(&field_b.meta.name)
                     && field_a.payload.typ == field_b.payload.typ
                     && field_a.payload.bit_field_width == field_b.payload.bit_field_width
                 {
                     // the field has been moved to another offset
                     changes.push(StructChange::FieldMoved {
-                        name: field_a.name,
+                        name: field_a.meta.name,
                         old_offset: field_a.payload.offset,
                         new_offset: field_b.payload.offset,
                     });

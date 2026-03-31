@@ -20,29 +20,40 @@ pub mod c_var;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Node<V> {
-    pub name: String,
-    pub comment: String,
-    pub source_code: String,
+    pub meta: NodeMetadata,
     pub payload: V,
 }
 
-impl<V> Node<V> {
-    pub fn from_entity<'a>(v: V, e: &'a Entity<'a>) -> Self {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct NodeMetadata {
+    pub name: String,
+    pub comment: String,
+    pub source_code: String,
+}
+
+impl NodeMetadata {
+    pub fn from_entity<'a>(e: &'a Entity<'a>) -> Self {
         let name = e.get_name().unwrap_or_default();
-        let comment = e.get_comment().unwrap_or_default();
+        let comment = e.get_comment().map(|c| c.trim_ascii().to_owned()).unwrap_or_default();
         let source_code = e.get_pretty_printer().print();
         Self {
             name,
             comment,
             source_code,
-            payload: v,
         }
+    }
+}
+
+impl<V> Node<V> {
+    pub fn from_entity<'a>(v: V, e: &'a Entity<'a>) -> Self {
+        let meta = NodeMetadata::from_entity(e);
+        Self { meta, payload: v }
     }
 }
 
 impl<V> Display for Node<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.source_code)
+        f.write_str(&self.meta.source_code)
     }
 }
 
@@ -88,12 +99,14 @@ impl HeaderContent {
                 EntityKind::VarDecl => {
                     let var = CVar::try_from_clang(item)?;
                     let node = Node::from_entity(var, &item);
-                    content.global_variables.insert(node.name.clone(), node);
+                    content
+                        .global_variables
+                        .insert(node.meta.name.clone(), node);
                 }
                 EntityKind::TypedefDecl => {
                     let alias = AliasType::try_from_clang(item)?;
                     let node = Node::from_entity(alias, &item);
-                    content.typedefs.insert(node.name.clone(), node);
+                    content.typedefs.insert(node.meta.name.clone(), node);
                 }
                 EntityKind::StructDecl | EntityKind::EnumDecl | EntityKind::UnionDecl
                     if !item.is_definition() =>
@@ -101,27 +114,27 @@ impl HeaderContent {
                     // opaque type
                     let opaque = OpaqueDecl::try_from_clang(item)?;
                     let node = Node::from_entity(opaque, &item);
-                    content.opaques.insert(node.name.clone(), node);
+                    content.opaques.insert(node.meta.name.clone(), node);
                 }
                 EntityKind::StructDecl => {
                     let s = CStruct::try_from_clang(item)?;
                     let node = Node::from_entity(s, &item);
-                    content.structs.insert(node.name.clone(), node);
+                    content.structs.insert(node.meta.name.clone(), node);
                 }
                 EntityKind::UnionDecl => {
                     let s = CUnion::try_from_clang(item)?;
                     let node = Node::from_entity(s, &item);
-                    content.unions.insert(node.name.clone(), node);
+                    content.unions.insert(node.meta.name.clone(), node);
                 }
                 EntityKind::EnumDecl => {
                     let e = CEnum::try_from_clang(item)?;
                     let node = Node::from_entity(e, &item);
-                    content.enums.insert(node.name.clone(), node);
+                    content.enums.insert(node.meta.name.clone(), node);
                 }
                 EntityKind::FunctionDecl => {
                     let f = CFunction::try_from_clang(item)?;
                     let node = Node::from_entity(f, &item);
-                    content.functions.insert(node.name.clone(), node);
+                    content.functions.insert(node.meta.name.clone(), node);
                 }
                 _ => (),
             }

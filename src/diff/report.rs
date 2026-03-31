@@ -4,7 +4,7 @@ use anyhow::Context;
 use enum_map::EnumMap;
 
 use crate::{
-    ast::{Header, Node},
+    ast::{Header, Node, NodeMetadata},
     diff::{
         Change, Compatibility, DeclDiff, DeclKind, SemanticDiff, SourceDiff, SourceDiffStyle,
         filter::DiffFilter,
@@ -54,7 +54,7 @@ impl DiffReport {
         // global variables
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(commented_source_code)
+            .sourcer(|n| decl_with_comment(&n.meta))
             .differ(VarChange::compute_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::GlobalVar].insert(name.to_owned(), diff);
@@ -66,7 +66,11 @@ impl DiffReport {
         // enums
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(enums::normalized_source_code)
+            .sourcer(|n| {
+                let mut meta = n.meta.clone();
+                meta.source_code = enums::normalized_source_code(n);
+                record_declaration(&meta, "enum")
+            })
             .differ(EnumDiff::semantic_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::Enum].insert(name.to_owned(), diff);
@@ -78,7 +82,7 @@ impl DiffReport {
         // structs
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(commented_source_code)
+            .sourcer(|n| record_declaration(&n.meta, "struct"))
             .differ(StructDiff::compute_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::Struct].insert(name.to_owned(), diff);
@@ -90,7 +94,7 @@ impl DiffReport {
         // unions
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(commented_source_code)
+            .sourcer(|n| record_declaration(&n.meta, "union"))
             .differ(UnionDiff::compute_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::Union].insert(name.to_owned(), diff);
@@ -102,7 +106,7 @@ impl DiffReport {
         // functions
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(commented_source_code)
+            .sourcer(|n| decl_with_comment(&n.meta))
             .source_diff_style(SourceDiffStyle::Split1v1)
             .differ(FunctionDiff::compute_diff)
             .on_change(|name, diff| {
@@ -115,7 +119,7 @@ impl DiffReport {
         // opaque declarations
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(commented_source_code)
+            .sourcer(|n| decl_with_comment(&n.meta))
             .differ(OpaqueDiff::compute_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::Opaque].insert(name.to_owned(), diff);
@@ -250,10 +254,28 @@ where
     }
 }
 
-fn commented_source_code<N>(n: &Node<N>) -> String {
+fn decl_with_comment(n: &NodeMetadata) -> String {
     if n.comment.is_empty() {
-        n.source_code.to_owned()
+        format!("{};", n.source_code)
+    } else if n.comment.starts_with("/*") {
+        format!("{}\n{};", n.comment, n.source_code)
     } else {
-        format!("/* {} */\n{}", n.comment, n.source_code)
+        format!("/* {} */\n{};", n.comment, n.source_code)
     }
+}
+
+pub fn record_declaration(meta: &NodeMetadata, record_kind: &str) -> String {
+    let name = &meta.name;
+    let source_code = &meta.source_code;
+    let source_code = if source_code.starts_with(&format!("{record_kind} {{")) {
+        // the struct has been declared as a typedef
+        format!("typedef {source_code} {name}")
+    } else {
+        format!("{source_code}")
+    };
+    decl_with_comment(&NodeMetadata {
+        name: name.clone(),
+        comment: meta.comment.clone(),
+        source_code,
+    })
 }

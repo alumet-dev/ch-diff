@@ -280,7 +280,7 @@ impl Printable for EnumChange {
     fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             EnumChange::ValueAdded(node) => {
-                writeln!(p.writer, "value added: {}", node.name.green(),)?;
+                writeln!(p.writer, "value added: {}", node.meta.name.green(),)?;
             }
             EnumChange::ValueRenamed {
                 old_name,
@@ -298,7 +298,7 @@ impl Printable for EnumChange {
                 writeln!(
                     p.writer,
                     "value removed: {}",
-                    format!("{}", node.name).red(),
+                    format!("{}", node.meta.name).red(),
                 )?;
             }
             EnumChange::TypeChanged { old, new } => {
@@ -366,10 +366,10 @@ impl Printable for StructChange {
                 writeln!(p.writer)?;
             }
             StructChange::FieldAdded(node) => {
-                writeln!(p.writer, "field added: {}", node.name.green())?;
+                writeln!(p.writer, "field added: {}", node.meta.name.green())?;
             }
             StructChange::FieldRemoved(node) => {
-                writeln!(p.writer, "field removed: {}", node.name.red())?;
+                writeln!(p.writer, "field removed: {}", node.meta.name.red())?;
             }
             StructChange::FieldMoved {
                 name,

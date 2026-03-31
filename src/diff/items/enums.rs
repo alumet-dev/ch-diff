@@ -63,10 +63,10 @@ impl EnumDiff {
             match b.variants.get(value_a) {
                 Some(v_b) => {
                     // compare the two variants
-                    if v_a.name != v_b.name {
+                    if v_a.meta.name != v_b.meta.name {
                         changes.push(EnumChange::ValueRenamed {
-                            old_name: v_a.name.clone(),
-                            new_name: v_b.name.clone(),
+                            old_name: v_a.meta.name.clone(),
+                            new_name: v_b.meta.name.clone(),
                             value: v_a.payload.clone(),
                         });
                     }

@@ -30,14 +30,14 @@ impl UnionDiff {
         for either in a.fields.iter().zip_longest(b.fields.iter()) {
             match either {
                 EitherOrBoth::Both(a, b) => {
-                    match (a.name == b.name, a.payload.typ == b.payload.typ) {
+                    match (a.meta.name == b.meta.name, a.payload.typ == b.payload.typ) {
                         (true, true) => {
                             // no change
                         }
                         (true, false) => {
                             // same pos, same name, different type
                             changes.push(StructChange::FieldChanged {
-                                name: a.name.clone(),
+                                name: a.meta.name.clone(),
                                 old: a.payload.clone(),
                                 new: b.payload.clone(),
                             });
@@ -45,8 +45,8 @@ impl UnionDiff {
                         (false, true) => {
                             // same pos, different name, same type
                             changes.push(StructChange::FieldRenamed {
-                                old_name: a.name.clone(),
-                                new_name: b.name.clone(),
+                                old_name: a.meta.name.clone(),
+                                new_name: b.meta.name.clone(),
                                 field: a.payload.clone(),
                             });
                         }
