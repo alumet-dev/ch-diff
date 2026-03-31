@@ -6,14 +6,11 @@ use itertools::{EitherOrBoth, Itertools};
 
 use crate::{
     ast::c_union::CUnion,
-    diff::{
-        ChangeBuf, ChangeContainer, ChangeKind, SourceDiff, SourceDiffStyle, structs::StructChange,
-    },
+    diff::{Change, ChangeBuf, Compatibility, items::structs::StructChange},
 };
 
 pub struct UnionDiff {
     pub changes: ChangeBuf<StructChange>,
-    pub source_diff: SourceDiff,
 }
 
 impl UnionDiff {
@@ -74,20 +71,13 @@ impl UnionDiff {
         if changes.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(Self {
-                changes,
-                source_diff: SourceDiff {
-                    old: a.to_string(),
-                    new: b.to_string(),
-                    style: SourceDiffStyle::Multiline,
-                },
-            }))
+            Ok(Some(Self { changes }))
         }
     }
 }
 
-impl ChangeContainer for UnionDiff {
-    fn overall_kind(&self) -> ChangeKind {
+impl Change for UnionDiff {
+    fn compat(&self) -> Compatibility {
         self.changes.compatibility
     }
 }

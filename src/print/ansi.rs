@@ -7,8 +7,13 @@ use std::{
 
 use crate::{
     diff::{
-        Change, ChangeBuf, ChangeKind, DeclChange, DiffReport, SourceDiff, SourceDiffStyle,
-        enums::EnumChange, functions::FunctionChange, structs::StructChange, variables::VarChange,
+        Change, ChangeBuf, Compatibility, DeclDiff, DeclKind, SemanticDiff, SourceDiff,
+        SourceDiffStyle,
+        items::{
+            enums::EnumChange, functions::FunctionChange, opaque::OpaqueDiff,
+            structs::StructChange, variables::VarChange,
+        },
+        report::{Diff, DiffReport},
     },
     print::types::{CLikeTypePrinter, RustLikeTypePrinter, TypePrinter, TypePrintingStyle},
 };
@@ -70,11 +75,11 @@ trait Printable {
 
 impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
     fn print_report(&mut self, report: DiffReport) -> anyhow::Result<()> {
-        fn compat_color(compat: ChangeKind) -> Color {
+        fn compat_color(compat: Compatibility) -> Color {
             match compat {
-                ChangeKind::BackwardCompatible => Color::Green,
-                ChangeKind::Dubious => Color::Yellow,
-                ChangeKind::Breaking => Color::Red,
+                Compatibility::BackwardCompatible => Color::Green,
+                Compatibility::Dubious => Color::Yellow,
+                Compatibility::Breaking => Color::Red,
             }
         }
 
@@ -88,19 +93,7 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
             for elem in iter {
                 writeln!(p.writer, "{}", format!("- {elem}").color(color))?;
             }
-            write!(p.writer, "\n")?;
-            Ok(())
-        }
-
-        fn write_detailed_changes<W: Write, C: Change + Printable>(
-            p: &mut AnsiPrinter<W>,
-            changes: &ChangeBuf<C>,
-        ) -> anyhow::Result<()> {
-            writeln!(p.writer, "\n#### Details\n")?;
-            for change in changes {
-                write!(p.writer, "- ")?;
-                change.print_ansi(p)?;
-            }
+            writeln!(p.writer)?;
             Ok(())
         }
 
@@ -128,134 +121,88 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
         if report.symbols.removed.is_empty() {
             writeln!(self.writer, "∅")?;
         } else {
-            write!(self.writer, "\n")?;
+            writeln!(self.writer)?;
             write_md_list(self, report.symbols.removed, Color::Red)?;
         }
         write!(self.writer, "Added symbols: ")?;
         if report.symbols.added.is_empty() {
             writeln!(self.writer, "∅")?;
         } else {
-            write!(self.writer, "\n")?;
+            writeln!(self.writer)?;
             write_md_list(self, report.symbols.added, Color::Green)?;
         }
 
-        // global vars
-        if !report.global_vars.is_empty() {
-            writeln!(self.writer, "\n## Global Variables\n")?;
-        }
-        for (i, change) in report.global_vars.changes.into_iter().enumerate() {
-            let n = i + 1;
-            writeln!(self.writer, "### {n}. {}", change.var_name())?;
-            change.print_ansi(self)?;
-        }
+        // declarations diff
+        let kinds = [
+            (DeclKind::GlobalVar, "var", "Global Variables"),
+            (DeclKind::Function, "fn", "Functions"),
+            (DeclKind::Enum, "enum", "Enums"),
+            (DeclKind::Struct, "struct", "Structs"),
+            (DeclKind::Union, "union", "Unions"),
+            (DeclKind::Opaque, "opaque", "Opaque Types"),
+        ];
+        for (kind, prefix, section_name) in kinds {
+            if !report.declarations[kind].is_empty() {
+                writeln!(self.writer, "\n## {section_name}\n")?;
 
-        // functions
-        if !report.functions.is_empty() {
-            writeln!(self.writer, "\n## Functions")?;
-        }
-        for (name, changes) in report.functions.into_iter() {
-            let qual = "fn";
-            match changes {
-                DeclChange::Removed => {
-                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
-                    writeln!(self.writer, "{}", "removed".red())?;
-                }
-                DeclChange::Changed(diff) => {
-                    writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(self)?;
-                    write_detailed_changes(self, &diff.changes)?;
+                for (name, diff) in report.declarations[kind].iter() {
+                    writeln!(self.writer, "### {prefix} {name}\n")?;
+                    diff.print_ansi(self)?;
                 }
             }
         }
+        Ok(())
+    }
+}
 
-        // enums
-        if !report.enums.is_empty() {
-            writeln!(self.writer, "\n## Enums")?;
-        }
-        for (name, changes) in report.enums.into_iter() {
-            let qual = "enum";
-            match changes {
-                DeclChange::Removed => {
-                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
-                    writeln!(self.writer, "{}", "removed".red())?;
-                }
-                DeclChange::Changed(diff) => {
-                    writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(self)?;
-                    write_detailed_changes(self, &diff.changes)?;
-                }
-            }
+impl Printable for Diff {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
+        writeln!(p.writer, "#### Source\n")?;
+        self.source.print_ansi(p)?;
+
+        writeln!(p.writer, "#### Details\n")?;
+        match &self.semantic {
+            SemanticDiff::Added => writeln!(p.writer, "added")?,
+            SemanticDiff::Removed => writeln!(p.writer, "removed")?,
+            SemanticDiff::Modified(diff) => diff.print_ansi(p)?,
         }
 
-        // structs
-        if !report.structs.is_empty() {
-            writeln!(self.writer, "\n## Structures")?;
-        }
-        for (name, changes) in report.structs.into_iter() {
-            let qual = "struct";
-            match changes {
-                DeclChange::Removed => {
-                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
-                    writeln!(self.writer, "{}", "removed".red())?;
-                }
-                DeclChange::Changed(diff) => {
-                    writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(self)?;
-                    write_detailed_changes(self, &diff.changes)?;
+        Ok(())
+    }
+}
 
-                    // After the details of each change, print the definition of anonymous members, if any.
-                    if !diff.old_anon.is_empty() {
-                        writeln!(self.writer, "\nwhere (old anonymous members):")?;
-                        for (anon_id, anon_def) in diff.old_anon.iter() {
-                            writeln!(self.writer, "- <anon{anon_id}>: {anon_def}")?;
-                        }
-                    }
-                    if !diff.new_anon.is_empty() {
-                        writeln!(self.writer, "\nwhere (new anonymous members):")?;
-                        for (anon_id, anon_def) in diff.new_anon.iter() {
-                            writeln!(self.writer, "- <anon{anon_id}>: {anon_def}")?;
-                        }
-                    }
-                }
-            }
-        }
+fn write_change_list<W: Write, C: Change + Printable>(
+    p: &mut AnsiPrinter<W>,
+    changes: &ChangeBuf<C>,
+) -> anyhow::Result<()> {
+    for change in changes {
+        writeln!(p.writer, "- ")?;
+        change.print_ansi(p)?;
+    }
+    Ok(())
+}
 
-        // unions
-        if !report.unions.is_empty() {
-            writeln!(self.writer, "\n## Unions")?;
+impl Printable for DeclDiff {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
+        match self {
+            DeclDiff::GlobalVar(diff) => diff.print_ansi(p),
+            DeclDiff::Enum(diff) => write_change_list(p, &diff.changes),
+            DeclDiff::Struct(diff) => write_change_list(p, &diff.changes),
+            DeclDiff::Union(diff) => write_change_list(p, &diff.changes),
+            DeclDiff::Function(diff) => write_change_list(p, &diff.changes),
+            DeclDiff::Opaque(diff) => diff.print_ansi(p),
         }
-        for (name, changes) in report.unions.into_iter() {
-            let qual = "union";
-            match changes {
-                DeclChange::Removed => {
-                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
-                    writeln!(self.writer, "{}", "removed".red())?;
-                }
-                DeclChange::Changed(diff) => {
-                    writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    diff.source_diff.print_ansi(self)?;
-                    write_detailed_changes(self, &diff.changes)?;
-                }
-            }
-        }
+    }
+}
 
-        // opaques
-        if !report.opaques.is_empty() {
-            writeln!(self.writer, "\n## Opaque Declarations")?;
-        }
-        for (name, changes) in report.opaques.into_iter() {
-            let qual = "opaque";
-            match changes {
-                DeclChange::Removed => {
-                    writeln!(self.writer, "\n### {} {name}\n", qual.strikethrough())?;
-                    writeln!(self.writer, "{}", "removed".red())?;
-                }
-                DeclChange::Changed(diff) => {
-                    writeln!(self.writer, "\n### {qual} {name}\n")?;
-                    InlineDiff(diff.old, diff.new).print_ansi(self)?;
-                }
-            }
-        }
+impl Printable for OpaqueDiff {
+    fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
+        writeln!(
+            p.writer,
+            "kind changed: {} -> {}",
+            self.old.kind.to_string().red(),
+            self.new.kind.to_string().green()
+        )?;
         Ok(())
     }
 }
@@ -273,20 +220,6 @@ impl Printable for VarChange {
                     "type changed:\n{}\n{}",
                     format!("- {}", old_typ).red(),
                     format!("+ {}", new_typ).green()
-                )?;
-            }
-            VarChange::Added(node) => {
-                writeln!(
-                    p.writer,
-                    "added variable: {}",
-                    format!("+ {}", node.payload).green()
-                )?;
-            }
-            VarChange::Removed(node) => {
-                writeln!(
-                    p.writer,
-                    "removed variable: {}",
-                    format!("- {}", node.payload).red()
                 )?;
             }
         };
@@ -313,8 +246,8 @@ impl Printable for FunctionChange {
                 writeln!(
                     p.writer,
                     "return type changed: {} -> {}",
-                    format!("{old_typ}").red(),
-                    format!("{new_typ}").green()
+                    old_typ.red(),
+                    new_typ.green()
                 )?;
             }
             FunctionChange::ParameterTypeChanged {
@@ -328,23 +261,15 @@ impl Printable for FunctionChange {
                 writeln!(
                     p.writer,
                     "type of `{name}` changed: {} -> {}",
-                    format!("{old_typ}").red(),
-                    format!("{new_typ}").green()
+                    old_typ.red(),
+                    new_typ.green()
                 )?;
             }
             FunctionChange::ParameterRemoved(arg) => {
-                writeln!(
-                    p.writer,
-                    "parameter removed: {}",
-                    format!("{}", arg.name).red(),
-                )?;
+                writeln!(p.writer, "parameter removed: {}", arg.name.red(),)?;
             }
             FunctionChange::ParameterAdded(arg) => {
-                writeln!(
-                    p.writer,
-                    "parameter added: {}",
-                    format!("{}", arg.name).red(),
-                )?;
+                writeln!(p.writer, "parameter added: {}", arg.name.red(),)?;
             }
         };
         Ok(())
@@ -355,11 +280,7 @@ impl Printable for EnumChange {
     fn print_ansi<W: Write>(&self, p: &mut AnsiPrinter<W>) -> anyhow::Result<()> {
         match self {
             EnumChange::ValueAdded(node) => {
-                writeln!(
-                    p.writer,
-                    "value added: {}",
-                    format!("{}", node.name).green(),
-                )?;
+                writeln!(p.writer, "value added: {}", node.name.green(),)?;
             }
             EnumChange::ValueRenamed {
                 old_name,
@@ -386,8 +307,8 @@ impl Printable for EnumChange {
                 writeln!(
                     p.writer,
                     "enum type changed: {} -> {}",
-                    format!("{old_typ}").red(),
-                    format!("{new_typ}").green(),
+                    old_typ.red(),
+                    new_typ.green(),
                 )?;
             }
         };
@@ -414,8 +335,8 @@ impl Printable for StructChange {
                 writeln!(
                     p.writer,
                     "field renamed: {} -> {}",
-                    format!("{old_name}").red(),
-                    format!("{new_name}").green(),
+                    old_name.red(),
+                    new_name.green(),
                 )?;
             }
             StructChange::FieldChanged { name, old, new } => {
@@ -442,7 +363,7 @@ impl Printable for StructChange {
                 let old_typ = p.type_printer.type_to_string(&old.typ)?;
                 let new_typ = p.type_printer.type_to_string(&new.typ)?;
                 InlineDiff(old_typ, new_typ).print_ansi(p)?;
-                write!(p.writer, "\n")?;
+                writeln!(p.writer)?;
             }
             StructChange::FieldAdded(node) => {
                 writeln!(p.writer, "field added: {}", node.name.green())?;
@@ -457,7 +378,7 @@ impl Printable for StructChange {
             } => {
                 write!(p.writer, "field moved: `{name}`: ")?;
                 InlineDiff(old_offset, new_offset).print_ansi(p)?;
-                write!(p.writer, "\n")?;
+                writeln!(p.writer)?;
             }
         };
         Ok(())
@@ -498,11 +419,11 @@ impl Printable for SourceDiff {
                     }
                 }
                 if self.style == SourceDiffStyle::Split1v1 {
-                    write!(p.writer, "\n")?;
+                    writeln!(p.writer)?;
                 }
             }
         }
-        write!(p.writer, "\n")?;
+        writeln!(p.writer)?;
         Ok(())
     }
 }

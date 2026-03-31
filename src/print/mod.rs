@@ -1,4 +1,4 @@
-use crate::diff::DiffReport;
+use crate::diff::report::DiffReport;
 
 pub mod ansi;
 pub mod types;

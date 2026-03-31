@@ -9,14 +9,11 @@ use crate::{
         c_enum::{CEnum, CEnumValue},
         c_type::CType,
     },
-    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
+    diff::{Change, ChangeBuf, Compatibility},
 };
-
-use super::SourceDiffStyle;
 
 pub struct EnumDiff {
     pub changes: ChangeBuf<EnumChange>,
-    pub source_diff: SourceDiff,
 }
 
 pub enum EnumChange {
@@ -39,18 +36,18 @@ pub enum EnumChange {
 }
 
 impl Change for EnumChange {
-    fn kind(&self) -> super::ChangeKind {
+    fn compat(&self) -> Compatibility {
         match self {
-            EnumChange::ValueAdded(_) => ChangeKind::BackwardCompatible,
-            EnumChange::ValueRenamed { .. } => ChangeKind::Dubious,
-            EnumChange::ValueRemoved(_) => ChangeKind::Breaking,
-            EnumChange::TypeChanged { .. } => ChangeKind::Breaking,
+            EnumChange::ValueAdded(_) => Compatibility::BackwardCompatible,
+            EnumChange::ValueRenamed { .. } => Compatibility::Dubious,
+            EnumChange::ValueRemoved(_) => Compatibility::Breaking,
+            EnumChange::TypeChanged { .. } => Compatibility::Breaking,
         }
     }
 }
 
 impl EnumDiff {
-    pub fn compute_diff(a: &CEnum, b: &CEnum) -> anyhow::Result<Option<Self>> {
+    pub fn semantic_diff(a: &CEnum, b: &CEnum) -> anyhow::Result<Option<Self>> {
         let mut changes = ChangeBuf::new();
 
         // check type
@@ -91,25 +88,18 @@ impl EnumDiff {
         if changes.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(Self {
-                changes,
-                source_diff: SourceDiff {
-                    old: normalize_enum_for_diff(a),
-                    new: normalize_enum_for_diff(b),
-                    style: SourceDiffStyle::Multiline,
-                },
-            }))
+            Ok(Some(Self { changes }))
         }
     }
 }
 
-impl ChangeContainer for EnumDiff {
-    fn overall_kind(&self) -> ChangeKind {
+impl Change for EnumDiff {
+    fn compat(&self) -> Compatibility {
         self.changes.compatibility
     }
 }
 
-fn normalize_enum_for_diff(e: &CEnum) -> String {
+pub fn normalized_source_code(e: &Node<CEnum>) -> String {
     // Add a trailing comma to avoid the diff algorithm to highlight a change in the last line of the enum when a new value is added
     let source = e.to_string();
     source.replace("\n}", ",\n}")

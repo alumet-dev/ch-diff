@@ -1,26 +1,16 @@
-use std::fmt::Display;
-
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind};
 
-use crate::ast::{c_struct::StructField, c_type::anon::AnonContext};
+use crate::ast::{Node, c_struct::StructField, c_type::anon::AnonContext};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct CUnion {
     pub size: usize,
     // it's a union, the fields overlap
-    pub fields: Vec<super::Node<StructField>>,
+    pub fields: Vec<Node<StructField>>,
 
     /// Definitions of anonymous types.
     pub anonymous: AnonContext,
-
-    display: String,
-}
-
-impl Display for CUnion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.display)
-    }
 }
 
 impl CUnion {
@@ -52,15 +42,12 @@ impl CUnion {
                         struct_type.get_display_name()
                     )
                 })?;
-            fields.push(super::Node::from_entity(field, &child));
+            fields.push(Node::from_entity(field, &child));
         }
-        let display = e.get_pretty_printer().print();
-
         Ok(Self {
             size,
             fields,
             anonymous,
-            display,
         })
     }
 }

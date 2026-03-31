@@ -2,16 +2,18 @@ use std::path::PathBuf;
 
 use ch_diff::{
     ast::{
-        HeaderContent,
+        Header, HeaderContent,
         c_opaque::OpaqueDeclKind,
         c_type::{BasicType, SimplifiedTypeKind, stdint::StandardIntType},
     },
-    diff::{DiffReport, filter::DiffFilter},
+    diff::{DeclKind, filter::DiffFilter, report::DiffReport},
 };
 use clang::{Clang, EntityKind, Index};
 use pretty_assertions::assert_eq;
+use serial_test::serial;
 
 #[test]
+#[serial]
 fn parse_functions() {
     let clang = Clang::new().unwrap();
     let index = Index::new(&clang, true, true);
@@ -32,6 +34,7 @@ fn parse_functions() {
 }
 
 #[test]
+#[serial]
 fn parse_types() {
     let clang = Clang::new().unwrap();
     let index = Index::new(&clang, true, true);
@@ -168,9 +171,9 @@ fn parse_types() {
 }
 
 #[test]
+#[serial]
 fn diff_structs() {
     let clang = Clang::new().unwrap();
-    let index = Index::new(&clang, true, true);
 
     let file_v1 = PathBuf::from(file!())
         .parent()
@@ -180,27 +183,26 @@ fn diff_structs() {
         .parent()
         .unwrap()
         .join("inputs/diff/structs_v2.h");
-    let tu1 = index.parser(file_v1).parse().unwrap();
-    let tu2 = index.parser(file_v2).parse().unwrap();
-
-    let h1 = HeaderContent::analyse(tu1).unwrap();
-    let h2 = HeaderContent::analyse(tu2).unwrap();
+    let h1 = Header::parse(&clang, file_v1).unwrap();
+    let h2 = Header::parse(&clang, file_v2).unwrap();
     let filter = DiffFilter::allow_everything();
-    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2), filter).unwrap();
-    assert!(diff.global_vars.is_empty());
-    assert!(diff.enums.is_empty());
-    assert!(!diff.structs.is_empty());
-    assert!(diff.functions.is_empty());
+    let diff = DiffReport::compute_diff(&h1, &h2, filter).unwrap();
+    assert!(diff.declarations[DeclKind::GlobalVar].is_empty());
+    assert!(diff.declarations[DeclKind::Function].is_empty());
+    assert!(diff.declarations[DeclKind::Enum].is_empty());
+    assert!(!diff.declarations[DeclKind::Struct].is_empty());
+    assert!(diff.declarations[DeclKind::Union].is_empty());
+    assert!(diff.declarations[DeclKind::Opaque].is_empty());
 
-    for s in h1.structs {
+    for s in h1.content.structs {
         println!("{}: {:?}", s.0, s.1);
     }
 }
 
 #[test]
+#[serial]
 fn diff_structs_hard() {
     let clang = Clang::new().unwrap();
-    let index = Index::new(&clang, true, true);
 
     let file_v1 = PathBuf::from(file!())
         .parent()
@@ -210,26 +212,23 @@ fn diff_structs_hard() {
         .parent()
         .unwrap()
         .join("inputs/diff/structs_hard_v2.h");
-    let tu1 = index.parser(file_v1).parse().unwrap();
-    let tu2 = index.parser(file_v2).parse().unwrap();
-
-    let h1 = HeaderContent::analyse(tu1).unwrap();
-    let h2 = HeaderContent::analyse(tu2).unwrap();
+    let h1 = Header::parse(&clang, file_v1).unwrap();
+    let h2 = Header::parse(&clang, file_v2).unwrap();
     let filter = DiffFilter::allow_everything();
-    let diff = DiffReport::compute_diff(("v1.h", &h1), ("v2.h", &h2), filter).unwrap();
-    assert!(diff.global_vars.is_empty());
-    assert!(diff.enums.is_empty());
-    assert!(!diff.structs.is_empty());
-    assert!(diff.functions.is_empty());
+    let diff = DiffReport::compute_diff(&h1, &h2, filter).unwrap();
+    assert!(diff.declarations[DeclKind::GlobalVar].is_empty());
+    assert!(diff.declarations[DeclKind::Enum].is_empty());
+    assert!(!diff.declarations[DeclKind::Struct].is_empty());
+    assert!(diff.declarations[DeclKind::Function].is_empty());
 
-    for (name, cstruct) in h1.structs {
+    for (name, cstruct) in h1.content.structs {
         println!("\n{name} (size = {})", cstruct.payload.size);
         for (offset, field) in cstruct.payload.fields {
             println!("- offset {offset}: {field:?}");
         }
     }
 
-    for (name, cstruct) in h2.structs {
+    for (name, cstruct) in h2.content.structs {
         println!("\n{name} (size = {})", cstruct.payload.size);
         for (offset, field) in cstruct.payload.fields {
             println!("- offset {offset}: {field:?}");
@@ -238,6 +237,7 @@ fn diff_structs_hard() {
 }
 
 #[test]
+#[serial]
 fn parse_opaque_structs() {
     let clang = Clang::new().unwrap();
     let index = Index::new(&clang, true, true);

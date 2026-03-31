@@ -5,7 +5,7 @@ use rustc_hash::FxHashSet;
 
 use crate::{
     ast::HeaderContent,
-    diff::{ChangeKind, filter::DiffFilter},
+    diff::{Compatibility, filter::DiffFilter},
 };
 
 pub struct ExportedSymbolsDiff {
@@ -29,11 +29,11 @@ impl ExportedSymbolsDiff {
         Ok(Self { added, removed })
     }
 
-    pub fn compatibility(&self) -> ChangeKind {
+    pub fn compatibility(&self) -> Compatibility {
         if self.removed.is_empty() {
-            ChangeKind::BackwardCompatible
+            Compatibility::BackwardCompatible
         } else {
-            ChangeKind::Breaking
+            Compatibility::Breaking
         }
     }
 }

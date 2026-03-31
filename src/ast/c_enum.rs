@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::collections::BTreeMap;
 
 use clang::{Entity, EntityKind, TypeKind};
 
@@ -8,13 +8,6 @@ use crate::ast::c_type::{BasicType, CType, SimplifiedTypeKind};
 pub struct CEnum {
     pub underlying_type: CType,
     pub variants: BTreeMap<Value, super::Node<CEnumValue>>,
-    display: String,
-}
-
-impl Display for CEnum {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.display)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -63,11 +56,9 @@ impl CEnum {
             })
             .collect();
 
-        let display = e.get_pretty_printer().print();
         Ok(Self {
             underlying_type,
             variants,
-            display,
         })
     }
 }

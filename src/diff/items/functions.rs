@@ -9,12 +9,11 @@ use crate::{
         c_function::{CFunction, FunctionArg},
         c_type::{CType, CTypeComparison},
     },
-    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff, SourceDiffStyle},
+    diff::{Change, ChangeBuf, Compatibility},
 };
 
 pub struct FunctionDiff {
     pub changes: ChangeBuf<FunctionChange>,
-    pub source_diff: SourceDiff,
 }
 
 #[derive(Debug)]
@@ -42,27 +41,27 @@ pub enum FunctionChange {
 }
 
 impl Change for FunctionChange {
-    fn kind(&self) -> super::ChangeKind {
+    fn compat(&self) -> Compatibility {
         match self {
-            FunctionChange::ParameterRenamed { .. } => ChangeKind::Dubious,
+            FunctionChange::ParameterRenamed { .. } => Compatibility::Dubious,
             FunctionChange::ReturnTypeChanged { old_typ, new_typ } => {
                 if old_typ.compare(new_typ) == CTypeComparison::Equivalent {
-                    ChangeKind::Dubious
+                    Compatibility::Dubious
                 } else {
-                    ChangeKind::Breaking
+                    Compatibility::Breaking
                 }
             }
             FunctionChange::ParameterTypeChanged {
                 old_typ, new_typ, ..
             } => {
                 if old_typ.compare(new_typ) == CTypeComparison::Equivalent {
-                    ChangeKind::Dubious
+                    Compatibility::Dubious
                 } else {
-                    ChangeKind::Breaking
+                    Compatibility::Breaking
                 }
             }
-            FunctionChange::ParameterRemoved(_) => ChangeKind::Breaking,
-            FunctionChange::ParameterAdded(_) => ChangeKind::Breaking,
+            FunctionChange::ParameterRemoved(_) => Compatibility::Breaking,
+            FunctionChange::ParameterAdded(_) => Compatibility::Breaking,
         }
     }
 }
@@ -125,20 +124,13 @@ impl FunctionDiff {
         if changes.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(Self {
-                changes,
-                source_diff: SourceDiff {
-                    old: a.to_string(),
-                    new: b.to_string(),
-                    style: SourceDiffStyle::Split1v1,
-                },
-            }))
+            Ok(Some(Self { changes }))
         }
     }
 }
 
-impl ChangeContainer for FunctionDiff {
-    fn overall_kind(&self) -> ChangeKind {
+impl Change for FunctionDiff {
+    fn compat(&self) -> Compatibility {
         self.changes.compatibility
     }
 }

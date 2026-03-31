@@ -1,8 +1,9 @@
 //! Simplified AST.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 
-use clang::{Entity, EntityKind, TranslationUnit};
+use anyhow::Context;
+use clang::{Clang, Entity, EntityKind, TranslationUnit};
 
 use crate::ast::{
     c_enum::CEnum, c_function::CFunction, c_opaque::OpaqueDecl, c_struct::CStruct,
@@ -21,6 +22,7 @@ pub mod c_var;
 pub struct Node<V> {
     pub name: String,
     pub comment: String,
+    pub source_code: String,
     pub payload: V,
 }
 
@@ -28,12 +30,26 @@ impl<V> Node<V> {
     pub fn from_entity<'a>(v: V, e: &'a Entity<'a>) -> Self {
         let name = e.get_name().unwrap_or_default();
         let comment = e.get_comment().unwrap_or_default();
+        let source_code = e.get_pretty_printer().print();
         Self {
             name,
             comment,
+            source_code,
             payload: v,
         }
     }
+}
+
+impl<V> Display for Node<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.source_code)
+    }
+}
+
+#[derive(Debug)]
+pub struct Header {
+    pub file: PathBuf,
+    pub content: HeaderContent,
 }
 
 #[derive(Default, Debug)]
@@ -47,6 +63,20 @@ pub struct HeaderContent {
     pub opaques: BTreeMap<String, Node<OpaqueDecl>>,
 }
 
+impl Header {
+    pub fn parse(clang: &Clang, file: impl Into<PathBuf>) -> anyhow::Result<Self> {
+        let file = file.into();
+        let index = clang::Index::new(clang, true, true);
+        let tu = index
+            .parser(&file)
+            .parse()
+            .with_context(|| format!("failed to parse {file:?}"))?;
+        let content =
+            HeaderContent::analyse(tu).with_context(|| format!("failed to analyse {file:?}"))?;
+        Ok(Self { file, content })
+    }
+}
+
 impl HeaderContent {
     pub fn analyse(tu: TranslationUnit<'_>) -> anyhow::Result<Self> {
         let mut content = Self::default();
@@ -54,7 +84,6 @@ impl HeaderContent {
             if !item.is_in_main_file() {
                 continue;
             }
-
             match item.get_kind() {
                 EntityKind::VarDecl => {
                     let var = CVar::try_from_clang(item)?;
@@ -97,6 +126,7 @@ impl HeaderContent {
                 _ => (),
             }
         }
+
         Ok(content)
     }
 

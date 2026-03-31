@@ -10,14 +10,11 @@ use crate::{
         c_struct::{CStruct, StructField},
         c_type::{CTypeComparison, anon::AnonContext},
     },
-    diff::{Change, ChangeBuf, ChangeContainer, ChangeKind, SourceDiff},
+    diff::{Change, ChangeBuf, Compatibility},
 };
-
-use super::SourceDiffStyle;
 
 pub struct StructDiff {
     pub changes: ChangeBuf<StructChange>,
-    pub source_diff: SourceDiff,
     pub old_anon: AnonContext,
     pub new_anon: AnonContext,
 }
@@ -52,20 +49,20 @@ pub enum StructChange {
 }
 
 impl Change for StructChange {
-    fn kind(&self) -> ChangeKind {
+    fn compat(&self) -> Compatibility {
         match self {
-            StructChange::SizeDiff { .. } => ChangeKind::Breaking,
-            StructChange::FieldRenamed { .. } => ChangeKind::Dubious,
+            StructChange::SizeDiff { .. } => Compatibility::Breaking,
+            StructChange::FieldRenamed { .. } => Compatibility::Dubious,
             StructChange::FieldChanged { old, new, .. } => {
                 if old.typ.compare(&new.typ) == CTypeComparison::Equivalent {
-                    ChangeKind::Dubious
+                    Compatibility::Dubious
                 } else {
-                    ChangeKind::Breaking
+                    Compatibility::Breaking
                 }
             }
-            StructChange::FieldMoved { .. } => ChangeKind::Breaking,
-            StructChange::FieldAdded(_) => ChangeKind::Breaking,
-            StructChange::FieldRemoved(_) => ChangeKind::Breaking,
+            StructChange::FieldMoved { .. } => Compatibility::Breaking,
+            StructChange::FieldAdded(_) => Compatibility::Breaking,
+            StructChange::FieldRemoved(_) => Compatibility::Breaking,
         }
     }
 }
@@ -159,11 +156,7 @@ impl StructDiff {
         } else {
             Ok(Some(Self {
                 changes,
-                source_diff: SourceDiff {
-                    old: a.to_string(),
-                    new: b.to_string(),
-                    style: SourceDiffStyle::Multiline,
-                },
+
                 new_anon: a.anonymous.clone(),
                 old_anon: b.anonymous.clone(),
             }))
@@ -171,8 +164,8 @@ impl StructDiff {
     }
 }
 
-impl ChangeContainer for StructDiff {
-    fn overall_kind(&self) -> ChangeKind {
+impl Change for StructDiff {
+    fn compat(&self) -> Compatibility {
         self.changes.compatibility
     }
 }

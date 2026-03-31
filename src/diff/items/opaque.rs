@@ -1,13 +1,17 @@
-use crate::{ast::c_opaque::OpaqueDecl, diff::ChangeContainer};
+use crate::{
+    ast::c_opaque::OpaqueDecl,
+    diff::{Change, Compatibility},
+};
 
 pub struct OpaqueDiff {
     pub old: OpaqueDecl,
     pub new: OpaqueDecl,
 }
 
-impl ChangeContainer for OpaqueDiff {
-    fn overall_kind(&self) -> super::ChangeKind {
-        super::ChangeKind::Dubious
+impl Change for OpaqueDiff {
+    fn compat(&self) -> Compatibility {
+        // we don't know what this opaque type represents and what is behind it
+        Compatibility::Dubious
     }
 }
 

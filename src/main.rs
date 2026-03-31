@@ -5,8 +5,8 @@ use clang::*;
 use clap::Parser;
 
 use ch_diff::{
-    ast::HeaderContent,
-    diff::{DiffReport, filter::DiffFilter},
+    ast::Header,
+    diff::{filter::DiffFilter, report::DiffReport},
     print::{AnsiPrinter, ReportPrinter, ansi::AnsiOptions, types::TypePrintingStyle},
 };
 
@@ -21,10 +21,8 @@ fn main() {
     let clang = Clang::new().expect("clang initialisation failed");
 
     // parse both versions
-    let old_header = parse(&clang, &args.old_file).unwrap();
-    let new_header = parse(&clang, &args.new_file).unwrap();
-    let old_name = args.old_file.to_str().unwrap();
-    let new_name = args.new_file.to_str().unwrap();
+    let old_header = Header::parse(&clang, &args.old_file).unwrap();
+    let new_header = Header::parse(&clang, &args.new_file).unwrap();
 
     // configure filter
     let filter = match args.whitelist {
@@ -33,7 +31,7 @@ fn main() {
     };
 
     // compute diff
-    let report = DiffReport::compute_diff((old_name, &old_header), (new_name, &new_header), filter)
+    let report = DiffReport::compute_diff(&old_header, &new_header, filter)
         .with_context(|| {
             format!(
                 "failed to compute diff between {:?} and {:?}",
@@ -57,15 +55,6 @@ fn main() {
             printer.print_report(report).expect("printing error");
         }
     }
-}
-
-fn parse<'a>(clang: &'a Clang, file: &PathBuf) -> anyhow::Result<HeaderContent> {
-    let index = Index::new(&clang, true, true);
-    let tu = index
-        .parser(&file)
-        .parse()
-        .with_context(|| format!("failed to parse {file:?}"))?;
-    HeaderContent::analyse(tu).with_context(|| format!("failed to analyse {file:?}"))
 }
 
 #[derive(clap::Parser)]

@@ -3,7 +3,7 @@ use clang::{Entity, EntityKind, Type, TypeKind};
 
 use crate::ast::{
     Node,
-    c_struct::{CStruct, StructField},
+    c_struct::CStruct,
     c_type::{
         anon::{AnonContext, AnonymousMemberId},
         stdint::StandardIntType,
@@ -48,12 +48,14 @@ pub mod anon {
 
     use derive_more::Display;
 
+    use crate::ast::Node;
+
     use super::{CStruct, CUnion};
 
     #[derive(Debug, PartialEq, Clone)]
     pub enum AnonymousMemberDef {
-        Struct(CStruct),
-        Union(CUnion),
+        Struct(Node<CStruct>),
+        Union(Node<CUnion>),
     }
 
     #[derive(Debug, PartialEq, Clone, Display)]
@@ -82,13 +84,14 @@ pub mod anon {
                 anon_defs: Vec::new(),
             }
         }
-        pub fn register_struct(&mut self, anon_struct: CStruct) -> AnonymousMemberId {
+
+        pub fn register_struct(&mut self, anon_struct: Node<CStruct>) -> AnonymousMemberId {
             let i = self.anon_defs.len();
             self.anon_defs.push(AnonymousMemberDef::Struct(anon_struct));
             AnonymousMemberId(i)
         }
 
-        pub fn register_union(&mut self, anon_union: CUnion) -> AnonymousMemberId {
+        pub fn register_union(&mut self, anon_union: Node<CUnion>) -> AnonymousMemberId {
             let i = self.anon_defs.len();
             self.anon_defs.push(AnonymousMemberDef::Union(anon_union));
             AnonymousMemberId(i)
@@ -207,6 +210,7 @@ impl CType {
                             let anon = CStruct::try_from_clang(decl).with_context(|| {
                                 format!("failed to parse anonymous struct {}", t.get_display_name())
                             })?;
+                            let anon = Node::from_entity(anon, &decl);
                             let anon_id = anon_ctx.register_struct(anon);
                             SimplifiedTypeKind::Anonymous(anon_id)
                         }
@@ -214,6 +218,7 @@ impl CType {
                             let anon = CUnion::try_from_clang(decl).with_context(|| {
                                 format!("failed to parse anonymous union {}", t.get_display_name())
                             })?;
+                            let anon = Node::from_entity(anon, &decl);
                             let anon_id = anon_ctx.register_union(anon);
                             SimplifiedTypeKind::Anonymous(anon_id)
                         }
@@ -347,17 +352,6 @@ pub enum CTypeComparison {
 
 impl CType {
     pub fn compare(&self, other: &CType) -> CTypeComparison {
-        fn compare_fields<'a>(
-            fields_a: impl Iterator<Item = &'a Node<StructField>>,
-            fields_b: impl Iterator<Item = &'a Node<StructField>>,
-        ) -> CTypeComparison {
-            let mut res = CTypeComparison::Same;
-            for (a, b) in fields_a.zip(fields_b) {
-                res = res.max(a.payload.typ.compare(&b.payload.typ));
-            }
-            res
-        }
-
         match (&self.kind, &other.kind) {
             (SimplifiedTypeKind::Enum(a), SimplifiedTypeKind::Enum(b))
                 if a.underlying_type == b.underlying_type =>

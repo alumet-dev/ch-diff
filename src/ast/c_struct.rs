@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::collections::BTreeMap;
 
 use anyhow::{Context, anyhow};
 use clang::{Entity, EntityKind, Type};
@@ -15,14 +15,6 @@ pub struct CStruct {
 
     /// Definitions of anonymous types.
     pub anonymous: AnonContext,
-
-    display: String,
-}
-
-impl Display for CStruct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.display)
-    }
 }
 
 /// Information about a struct field, **without its name**.
@@ -33,7 +25,7 @@ pub struct StructField {
     /// If this is a bit-field, its number of bits.
     ///
     /// A bit-field is declared like this:
-    /// ```
+    /// ```c
     /// struct S {
     ///     int some_bits: 3;
     ///     int more_bits: 5;
@@ -77,12 +69,10 @@ impl CStruct {
             fields.insert(field.offset, super::Node::from_entity(field, &child));
         }
 
-        let display = e.get_pretty_printer().print();
         Ok(Self {
             size,
             fields,
             anonymous,
-            display,
         })
     }
 }
