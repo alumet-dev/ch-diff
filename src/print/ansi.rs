@@ -146,7 +146,13 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
                 writeln!(self.writer, "\n## {section_name}\n")?;
 
                 for (name, diff) in report.declarations[kind].iter() {
+                    let compat = diff.semantic.compat();
                     writeln!(self.writer, "### {prefix} {name}\n")?;
+                    writeln!(
+                        self.writer,
+                        "{}\n",
+                        format!("compatibility: **{compat}**").color(compat_color(compat)),
+                    )?;
                     diff.print_ansi(self)?;
                 }
             }
@@ -176,7 +182,7 @@ fn write_change_list<W: Write, C: Change + Printable>(
     changes: &ChangeBuf<C>,
 ) -> anyhow::Result<()> {
     for change in changes {
-        writeln!(p.writer, "- ")?;
+        write!(p.writer, "- ")?;
         change.print_ansi(p)?;
     }
     Ok(())

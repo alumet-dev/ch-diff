@@ -31,7 +31,10 @@ impl<W: Write> CodeGenerator<W> {
     }
 
     pub fn generate_code(&mut self, report: &DiffReport) -> anyhow::Result<()> {
-        writeln!(self.writer, "#include <stdint.h>\n#include <stdlib.h>\n#include <stdbool.h>\n")?;
+        writeln!(
+            self.writer,
+            "#include <stdint.h>\n#include <stdlib.h>\n#include <stdbool.h>\n"
+        )?;
         for diffs in report.declarations.values() {
             for diff in diffs.values() {
                 let code = match self.options.version {

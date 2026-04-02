@@ -34,7 +34,10 @@ pub struct NodeMetadata {
 impl NodeMetadata {
     pub fn from_entity<'a>(e: &'a Entity<'a>) -> Self {
         let name = e.get_name().unwrap_or_default();
-        let comment = e.get_comment().map(|c| c.trim_ascii().to_owned()).unwrap_or_default();
+        let comment = e
+            .get_comment()
+            .map(|c| c.trim_ascii().to_owned())
+            .unwrap_or_default();
         let source_code = e.get_pretty_printer().print();
         Self {
             name,

@@ -46,7 +46,7 @@ fn main() {
         type_style: args.types,
         print_diff_sign: false,
     };
-    match args.output {
+    match args.report_output {
         Some(f) => {
             let mut printer = AnsiPrinter::create_file(f.as_path(), options).unwrap();
             printer.print_report(&report).expect("printing error");
@@ -77,7 +77,7 @@ struct Args {
 
     /// Report output file. By default, we print to stdout.
     #[arg(long, short)]
-    output: Option<PathBuf>,
+    report_output: Option<PathBuf>,
 
     /// Version to output if codegen is enabled.
     #[arg(long)]

@@ -9,7 +9,7 @@ use crate::{
         Change, Compatibility, DeclDiff, DeclKind, SemanticDiff, SourceDiff, SourceDiffStyle,
         filter::DiffFilter,
         items::{
-            enums::{self, EnumDiff},
+            enums::EnumDiff,
             functions::FunctionDiff,
             opaque::OpaqueDiff,
             structs::StructDiff,
@@ -66,11 +66,7 @@ impl DiffReport {
         // enums
         NodeMapDiffer::builder()
             .filter(&filter)
-            .sourcer(|n| {
-                let mut meta = n.meta.clone();
-                meta.source_code = enums::normalized_source_code(n);
-                record_declaration(&meta, "enum")
-            })
+            .sourcer(|n| record_declaration(&n.meta, "enum"))
             .differ(EnumDiff::semantic_diff)
             .on_change(|name, diff| {
                 declarations[DeclKind::Enum].insert(name.to_owned(), diff);
@@ -141,18 +137,19 @@ impl DiffReport {
     }
 
     pub fn global_compatibility(&self) -> Compatibility {
-        let mut compat = self.symbols.compatibility();
-
-        if let Some(c) = self
-            .declarations
-            .values()
-            .map(|d| d.values().map(|diff| diff.semantic.compat()).min())
-            .min()
-            .flatten()
-        {
-            compat = compat.min(c);
-        }
-        compat
+        let symbols_compat = self.symbols.compatibility();
+        let decl_compat = dbg!(
+            self.declarations
+                .values()
+                .map(|d| d
+                    .values()
+                    .map(|diff| diff.semantic.compat())
+                    .min()
+                    .unwrap_or(Compatibility::BackwardCompatible))
+                .min()
+        )
+        .unwrap_or(Compatibility::BackwardCompatible);
+        symbols_compat.min(decl_compat)
     }
 }
 

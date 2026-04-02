@@ -98,9 +98,3 @@ impl Change for EnumDiff {
         self.changes.compatibility()
     }
 }
-
-pub fn normalized_source_code(e: &Node<CEnum>) -> String {
-    // Add a trailing comma to avoid the diff algorithm to highlight a change in the last line of the enum when a new value is added
-    let source = e.to_string();
-    source.replace("\n}", ",\n}")
-}
