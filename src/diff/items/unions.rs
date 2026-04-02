@@ -6,7 +6,7 @@ use itertools::{EitherOrBoth, Itertools};
 
 use crate::{
     ast::c_union::CUnion,
-    diff::{Change, ChangeBuf, Compatibility, items::structs::StructChange},
+    diff::{Change, Compatibility, buffer::ChangeBuf, items::structs::StructChange},
 };
 
 pub struct UnionDiff {
@@ -78,6 +78,6 @@ impl UnionDiff {
 
 impl Change for UnionDiff {
     fn compat(&self) -> Compatibility {
-        self.changes.compatibility
+        self.changes.compatibility()
     }
 }

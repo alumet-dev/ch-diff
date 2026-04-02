@@ -9,7 +9,7 @@ use crate::{
         c_function::{CFunction, FunctionArg},
         c_type::{CType, CTypeComparison},
     },
-    diff::{Change, ChangeBuf, Compatibility},
+    diff::{Change, Compatibility, buffer::ChangeBuf},
 };
 
 pub struct FunctionDiff {
@@ -131,6 +131,6 @@ impl FunctionDiff {
 
 impl Change for FunctionDiff {
     fn compat(&self) -> Compatibility {
-        self.changes.compatibility
+        self.changes.compatibility()
     }
 }

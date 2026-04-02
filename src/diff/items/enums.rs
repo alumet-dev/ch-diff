@@ -9,7 +9,7 @@ use crate::{
         c_enum::{CEnum, CEnumValue},
         c_type::CType,
     },
-    diff::{Change, ChangeBuf, Compatibility},
+    diff::{Change, Compatibility, buffer::ChangeBuf},
 };
 
 pub struct EnumDiff {
@@ -95,7 +95,7 @@ impl EnumDiff {
 
 impl Change for EnumDiff {
     fn compat(&self) -> Compatibility {
-        self.changes.compatibility
+        self.changes.compatibility()
     }
 }
 

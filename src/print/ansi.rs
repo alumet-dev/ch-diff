@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     diff::{
-        Change, ChangeBuf, Compatibility, DeclDiff, DeclKind, SemanticDiff, SourceDiff,
-        SourceDiffStyle,
+        Change, Compatibility, DeclDiff, DeclKind, SemanticDiff, SourceDiff, SourceDiffStyle,
+        buffer::ChangeBuf,
         items::{
             enums::EnumChange, functions::FunctionChange, opaque::OpaqueDiff,
             structs::StructChange, variables::VarChange,

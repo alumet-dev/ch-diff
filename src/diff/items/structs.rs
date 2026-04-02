@@ -10,7 +10,7 @@ use crate::{
         c_struct::{CStruct, StructField},
         c_type::{CTypeComparison, anon::AnonContext},
     },
-    diff::{Change, ChangeBuf, Compatibility},
+    diff::{Change, Compatibility, buffer::ChangeBuf},
 };
 
 pub struct StructDiff {
@@ -166,6 +166,6 @@ impl StructDiff {
 
 impl Change for StructDiff {
     fn compat(&self) -> Compatibility {
-        self.changes.compatibility
+        self.changes.compatibility()
     }
 }
