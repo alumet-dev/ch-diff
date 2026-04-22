@@ -66,7 +66,7 @@ pub enum Namespace {
     /// Names of structs, enums and unions.
     Tags,
     /// Function names, typedefs, enum values, etc.
-    Other
+    Other,
 }
 
 #[derive(Debug)]

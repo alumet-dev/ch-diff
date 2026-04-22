@@ -3,7 +3,7 @@
 Detect breaking changes in C libraries, using only their header files (no inspection of ELF binaries).
 
 These tools help you identify changes that could break existing code **before** they cause issues in production.
-They also help you support multiple versions of a library in the case of breaking changes.
+They also help you support **multiple versions** of a library in the case of breaking changes.
 
 | Tool        | Purpose                                                          |
 | ----------- | ---------------------------------------------------------------- |

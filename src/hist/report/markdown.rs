@@ -57,6 +57,9 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
     writeln!(writer, "## Changes History")?;
     writeln!(writer)?;
     for (version, changes) in changes.changed_by_version.iter() {
+        if changes.is_empty() {
+            continue;
+        }
         writeln!(writer, "### Changed in {}", version.new)?;
         writeln!(writer)?;
         for (name, diff) in changes {
@@ -76,6 +79,10 @@ fn print_details(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
     writeln!(writer)?;
 
     for (version, changes) in changes.changed_by_version.iter() {
+        if changes.is_empty() {
+            continue;
+        }
+
         writeln!(writer, "### Changed in {}", version.new)?;
         writeln!(writer)?;
         for (name, diff) in changes {

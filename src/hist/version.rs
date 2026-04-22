@@ -10,12 +10,14 @@ pub struct BiVersion {
 
 impl BiVersion {
     pub fn from_ref(old: &Version, new: &Version) -> Self {
-        Self { old: old.clone(), new: new.clone() }
+        Self {
+            old: old.clone(),
+            new: new.clone(),
+        }
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Version {
     pub numbers: Vec<u8>,
 }

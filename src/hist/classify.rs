@@ -11,13 +11,15 @@ use crate::{
         Change, Compatibility,
         filter::DiffFilter,
         report::{Diff, DiffReport},
-    }, hist::version::{BiVersion, Version},
+    },
+    hist::version::{BiVersion, Version},
 };
 
 pub struct ClassifiedChanges {
     pub stable: FxHashSet<String>,
     pub changed: FxHashMap<String, Compatibility>,
     pub changed_by_version: BTreeMap<BiVersion, FxHashMap<String, Diff>>,
+    pub inputs: FxHashMap<Version, PathBuf>,
 }
 
 pub fn classify_changes_in_history(
@@ -28,6 +30,12 @@ pub fn classify_changes_in_history(
     let mut changed = FxHashMap::default();
     let mut changed_by_version = BTreeMap::default();
     let mut stable = None;
+
+    // remember the input paths
+    let inputs = files
+        .iter()
+        .map(|(k, v)| (v.to_owned(), k.to_owned()))
+        .collect();
 
     for ((old_path, old_version), (new_path, new_version)) in files.into_iter().tuple_windows() {
         log::debug!("Comparing {old_path:?} and {new_path:?}");
@@ -57,6 +65,7 @@ pub fn classify_changes_in_history(
         });
 
         // update the list of changed and stable items
+        let mut diff_here = FxHashMap::default();
         for changes in report.declarations.changed.into_values() {
             for (name, diff) in changes {
                 let compat = diff.semantic.compat();
@@ -66,17 +75,17 @@ pub fn classify_changes_in_history(
                     .and_modify(|c| *c = Ord::min(*c, compat))
                     .or_insert(compat);
 
-                changed_by_version
-                    .entry(BiVersion::from_ref(old_version, new_version))
-                    .or_insert_with(FxHashMap::default)
-                    .insert(name.to_owned(), diff);
+                diff_here.insert(name.to_owned(), diff);
             }
         }
+        println!("changed in {new_version:?}: {}", diff_here.len());
+        changed_by_version.insert(BiVersion::from_ref(old_version, new_version), diff_here);
     }
 
     ClassifiedChanges {
         stable: stable.unwrap_or_default(),
         changed,
         changed_by_version,
+        inputs,
     }
 }

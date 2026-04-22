@@ -39,7 +39,7 @@ impl DiffFilter {
         for line in reader.lines() {
             let line = line?;
             let line = line.trim_ascii();
-            if !line.is_empty() {
+            if !line.is_empty() && !line.starts_with("#") {
                 set.insert(line.to_owned());
             }
         }

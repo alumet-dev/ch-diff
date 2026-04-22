@@ -6,10 +6,13 @@ use clap::Parser;
 use regex::Regex;
 
 use ch_diff::{
+    PathOutputStyle,
     diff::filter::DiffFilter,
     generate::CodeVersion,
     hist::{
-        classify::classify_changes_in_history, codegen::HistCodegen, report::MarkdownHistPrinter,
+        classify::classify_changes_in_history,
+        codegen::HistCodegen,
+        report::{json::JsonHistPrinter, markdown::MarkdownHistPrinter},
         version::Version,
     },
 };
@@ -36,7 +39,13 @@ fn main() -> anyhow::Result<()> {
     let mut files = std::fs::read_dir(&args.input)
         .context("failed to list the content of the input directory")?
         .map(|f| {
-            let path = f.unwrap().path();
+            let mut path = f.unwrap().path();
+            match args.paths_output_style {
+                PathOutputStyle::Relative => (),
+                PathOutputStyle::Absolute => {
+                    path = path.canonicalize().expect("canonicalize() failed")
+                }
+            }
             let filename = path.file_name().unwrap().to_str().unwrap();
             let groups = version_regex.captures(&filename).unwrap();
             let version = groups.get(1).unwrap().as_str().to_owned();
@@ -50,8 +59,15 @@ fn main() -> anyhow::Result<()> {
     let changes = classify_changes_in_history(&files, &clang, &filter);
 
     // emit reports
+    let mut printer = JsonHistPrinter::new(args.output_dir.clone());
+    printer
+        .print(&changes)
+        .context("failed to emit JSON reports")?;
+
     let mut printer = MarkdownHistPrinter::new(args.output_dir.clone());
-    printer.print(&changes).context("failed to emit reports")?;
+    printer
+        .print(&changes)
+        .context("failed to emit Markdown reports")?;
 
     // print code
     if let Some(code_version) = args.generate_code {
@@ -78,6 +94,10 @@ struct Args {
     /// Output directory.
     #[arg(short, long)]
     output_dir: PathBuf,
+
+    /// How to output paths.
+    #[arg(short, long, default_value_t = PathOutputStyle::Absolute)]
+    paths_output_style: PathOutputStyle,
 
     /// Save the changes between each version in .h files.
     #[arg(long)]
