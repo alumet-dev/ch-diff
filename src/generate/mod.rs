@@ -26,7 +26,7 @@ pub struct CodegenOptions {
 }
 
 impl<W: Write> CodeGenerator<W> {
-    fn new(writer: W, options: CodegenOptions) -> anyhow::Result<Self> {
+    pub fn new(writer: W, options: CodegenOptions) -> anyhow::Result<Self> {
         Ok(Self { writer, options })
     }
 

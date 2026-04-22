@@ -3,6 +3,19 @@ use std::{fmt::Display, str::FromStr};
 use itertools::Itertools;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BiVersion {
+    pub old: Version,
+    pub new: Version,
+}
+
+impl BiVersion {
+    pub fn from_ref(old: &Version, new: &Version) -> Self {
+        Self { old: old.clone(), new: new.clone() }
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version {
     pub numbers: Vec<u8>,
 }

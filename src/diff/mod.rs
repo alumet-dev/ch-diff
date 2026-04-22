@@ -10,7 +10,7 @@ pub mod report;
 
 // TODO differentiate source-compatibility and abi-compatibility
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, derive_more::Display)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, derive_more::Display)]
 pub enum Compatibility {
     /// A breaking change, for instance a parameter has been added to a function.
     #[display("breaking change(s)")]

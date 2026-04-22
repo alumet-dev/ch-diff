@@ -8,7 +8,10 @@ use regex::Regex;
 use ch_diff::{
     diff::filter::DiffFilter,
     generate::CodeVersion,
-    hist::{classify::classify_changes_in_history, report::MarkdownHistPrinter, version::Version},
+    hist::{
+        classify::classify_changes_in_history, codegen::HistCodegen, report::MarkdownHistPrinter,
+        version::Version,
+    },
 };
 
 fn main() -> anyhow::Result<()> {
@@ -47,10 +50,16 @@ fn main() -> anyhow::Result<()> {
     let changes = classify_changes_in_history(&files, &clang, &filter);
 
     // emit reports
-    let mut printer = MarkdownHistPrinter::new(args.output_dir);
-    printer.print(changes).context("failed to emit reports")?;
+    let mut printer = MarkdownHistPrinter::new(args.output_dir.clone());
+    printer.print(&changes).context("failed to emit reports")?;
 
     // print code
+    if let Some(code_version) = args.generate_code {
+        let mut generator = HistCodegen::new(args.output_dir, code_version);
+        generator
+            .generate_partial_version(changes)
+            .context("failed to generate partial versions")?;
+    }
 
     Ok(())
 }
@@ -69,6 +78,10 @@ struct Args {
     /// Output directory.
     #[arg(short, long)]
     output_dir: PathBuf,
+
+    /// Save the changes between each version in .h files.
+    #[arg(long)]
+    generate_code: Option<CodeVersion>,
 
     /// Path to the whitelist file.
     ///

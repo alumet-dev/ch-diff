@@ -16,7 +16,7 @@ impl MarkdownHistPrinter {
         Self { output_dir }
     }
 
-    pub fn print(&mut self, changes: ClassifiedChanges) -> anyhow::Result<()> {
+    pub fn print(&mut self, changes: &ClassifiedChanges) -> anyhow::Result<()> {
         let mut summary = File::create(self.output_dir.join("report-summary.md"))?;
         let mut details = File::create(self.output_dir.join("report-details.md"))?;
         print_summary(&mut summary, &changes)?;
@@ -29,7 +29,7 @@ fn compat_to_ascii(compat: Compatibility) -> &'static str {
     match compat {
         Compatibility::Breaking => "(!)",
         Compatibility::Dubious => "(?)",
-        Compatibility::BackwardCompatible => "(-)",
+        Compatibility::BackwardCompatible => "(~)",
     }
 }
 
@@ -57,7 +57,7 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
     writeln!(writer, "## Changes History")?;
     writeln!(writer)?;
     for (version, changes) in changes.changed_by_version.iter() {
-        writeln!(writer, "### Changed in {version}")?;
+        writeln!(writer, "### Changed in {}", version.new)?;
         writeln!(writer)?;
         for (name, diff) in changes {
             writeln!(
@@ -76,7 +76,7 @@ fn print_details(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
     writeln!(writer)?;
 
     for (version, changes) in changes.changed_by_version.iter() {
-        writeln!(writer, "### Changed in {version}")?;
+        writeln!(writer, "### Changed in {}", version.new)?;
         writeln!(writer)?;
         for (name, diff) in changes {
             writeln!(

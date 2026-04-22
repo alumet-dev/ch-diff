@@ -11,13 +11,13 @@ use crate::{
         Change, Compatibility,
         filter::DiffFilter,
         report::{Diff, DiffReport},
-    }, hist::version::Version,
+    }, hist::version::{BiVersion, Version},
 };
 
 pub struct ClassifiedChanges {
     pub stable: FxHashSet<String>,
     pub changed: FxHashMap<String, Compatibility>,
-    pub changed_by_version: BTreeMap<Version, FxHashMap<String, Diff>>,
+    pub changed_by_version: BTreeMap<BiVersion, FxHashMap<String, Diff>>,
 }
 
 pub fn classify_changes_in_history(
@@ -29,7 +29,7 @@ pub fn classify_changes_in_history(
     let mut changed_by_version = BTreeMap::default();
     let mut stable = None;
 
-    for ((old_path, _), (new_path, new_version)) in files.into_iter().tuple_windows() {
+    for ((old_path, old_version), (new_path, new_version)) in files.into_iter().tuple_windows() {
         log::debug!("Comparing {old_path:?} and {new_path:?}");
         let old_header = Header::parse(&clang, &old_path).unwrap();
         let new_header = Header::parse(&clang, &new_path).unwrap();
@@ -67,7 +67,7 @@ pub fn classify_changes_in_history(
                     .or_insert(compat);
 
                 changed_by_version
-                    .entry(new_version.to_owned())
+                    .entry(BiVersion::from_ref(old_version, new_version))
                     .or_insert_with(FxHashMap::default)
                     .insert(name.to_owned(), diff);
             }
