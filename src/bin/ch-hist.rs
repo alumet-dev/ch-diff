@@ -57,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     if let Some(code_version) = args.generate_code {
         let mut generator = HistCodegen::new(args.output_dir, code_version);
         generator
-            .generate_partial_version(changes)
+            .generate_partial_versions(changes)
             .context("failed to generate partial versions")?;
     }
 
