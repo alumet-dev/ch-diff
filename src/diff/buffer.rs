@@ -1,6 +1,6 @@
 use crate::diff::{Change, Compatibility};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChangeBuf<C: Change> {
     changes: Vec<C>,
     compatibility: Compatibility,

@@ -11,6 +11,7 @@ use crate::{
 pub struct ExportedSymbolsDiff {
     pub added: Vec<String>,
     pub removed: Vec<String>,
+    pub common: Vec<String>,
 }
 
 impl ExportedSymbolsDiff {
@@ -19,14 +20,29 @@ impl ExportedSymbolsDiff {
         b: &HeaderContent,
         filter: &DiffFilter,
     ) -> anyhow::Result<Self> {
-        let symbols_a = a.symbols().cloned().collect::<FxHashSet<String>>();
-        let symbols_b = b.symbols().cloned().collect::<FxHashSet<String>>();
+        let symbols_a = a
+            .symbols()
+            .filter(|x| filter.accepts(x))
+            .cloned()
+            .collect::<FxHashSet<String>>();
+        let symbols_b = b
+            .symbols()
+            .filter(|x| filter.accepts(x))
+            .cloned()
+            .collect::<FxHashSet<String>>();
+
         let added = symbols_b.difference(&symbols_a);
         let removed = symbols_a.difference(&symbols_b);
+        let common = symbols_a.intersection(&symbols_b);
 
-        let added = Vec::from_iter(added.filter(|x| filter.accepts(x)).cloned());
-        let removed = Vec::from_iter(removed.filter(|x| filter.accepts(x)).cloned());
-        Ok(Self { added, removed })
+        let added = Vec::from_iter(added.cloned());
+        let removed = Vec::from_iter(removed.cloned());
+        let common = Vec::from_iter(common.cloned());
+        Ok(Self {
+            added,
+            removed,
+            common,
+        })
     }
 
     pub fn compatibility(&self) -> Compatibility {

@@ -142,10 +142,10 @@ impl<W: Write> super::ReportPrinter for AnsiPrinter<W> {
             (DeclKind::Opaque, "opaque", "Opaque Types"),
         ];
         for (kind, prefix, section_name) in kinds {
-            if !report.declarations[kind].is_empty() {
+            if !report.declarations.changed[kind].is_empty() {
                 writeln!(self.writer, "\n## {section_name}\n")?;
 
-                for (name, diff) in report.declarations[kind].iter() {
+                for (name, diff) in report.declarations.changed[kind].iter() {
                     let compat = diff.semantic.compat();
                     writeln!(self.writer, "### {prefix} {name}\n")?;
                     writeln!(

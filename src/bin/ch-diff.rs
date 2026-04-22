@@ -32,7 +32,7 @@ fn main() {
     };
 
     // compute diff
-    let report = DiffReport::compute_diff(&old_header, &new_header, filter)
+    let report = DiffReport::compute_diff(&old_header, &new_header, &filter)
         .with_context(|| {
             format!(
                 "failed to compute diff between {:?} and {:?}",

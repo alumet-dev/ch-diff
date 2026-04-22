@@ -186,13 +186,13 @@ fn diff_structs() {
     let h1 = Header::parse(&clang, file_v1).unwrap();
     let h2 = Header::parse(&clang, file_v2).unwrap();
     let filter = DiffFilter::allow_everything();
-    let diff = DiffReport::compute_diff(&h1, &h2, filter).unwrap();
-    assert!(diff.declarations[DeclKind::GlobalVar].is_empty());
-    assert!(diff.declarations[DeclKind::Function].is_empty());
-    assert!(diff.declarations[DeclKind::Enum].is_empty());
-    assert!(!diff.declarations[DeclKind::Struct].is_empty());
-    assert!(diff.declarations[DeclKind::Union].is_empty());
-    assert!(diff.declarations[DeclKind::Opaque].is_empty());
+    let diff = DiffReport::compute_diff(&h1, &h2, &filter).unwrap();
+    assert!(diff.declarations.changed[DeclKind::GlobalVar].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Function].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Enum].is_empty());
+    assert!(!diff.declarations.changed[DeclKind::Struct].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Union].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Opaque].is_empty());
 
     for s in h1.content.structs {
         println!("{}: {:?}", s.0, s.1);
@@ -215,11 +215,11 @@ fn diff_structs_hard() {
     let h1 = Header::parse(&clang, file_v1).unwrap();
     let h2 = Header::parse(&clang, file_v2).unwrap();
     let filter = DiffFilter::allow_everything();
-    let diff = DiffReport::compute_diff(&h1, &h2, filter).unwrap();
-    assert!(diff.declarations[DeclKind::GlobalVar].is_empty());
-    assert!(diff.declarations[DeclKind::Enum].is_empty());
-    assert!(!diff.declarations[DeclKind::Struct].is_empty());
-    assert!(diff.declarations[DeclKind::Function].is_empty());
+    let diff = DiffReport::compute_diff(&h1, &h2, &filter).unwrap();
+    assert!(diff.declarations.changed[DeclKind::GlobalVar].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Enum].is_empty());
+    assert!(!diff.declarations.changed[DeclKind::Struct].is_empty());
+    assert!(diff.declarations.changed[DeclKind::Function].is_empty());
 
     for (name, cstruct) in h1.content.structs {
         println!("\n{name} (size = {})", cstruct.payload.size);

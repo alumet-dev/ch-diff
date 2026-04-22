@@ -12,10 +12,12 @@ use crate::{
     diff::{Change, Compatibility, buffer::ChangeBuf},
 };
 
+#[derive(Clone)]
 pub struct EnumDiff {
     pub changes: ChangeBuf<EnumChange>,
 }
 
+#[derive(Clone)]
 pub enum EnumChange {
     /// New enum value added. This is backward-compatible.
     ValueAdded(Node<CEnumValue>),

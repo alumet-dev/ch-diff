@@ -35,7 +35,7 @@ impl<W: Write> CodeGenerator<W> {
             self.writer,
             "#include <stdint.h>\n#include <stdlib.h>\n#include <stdbool.h>\n"
         )?;
-        for diffs in report.declarations.values() {
+        for diffs in report.declarations.changed.values() {
             for diff in diffs.values() {
                 let code = match self.options.version {
                     CodeVersion::Old => &diff.source.old,

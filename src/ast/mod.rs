@@ -60,6 +60,15 @@ impl<V> Display for Node<V> {
     }
 }
 
+/// C namespace.
+/// TODO should be used in the stable/unstable codegen to avoid collisions.
+pub enum Namespace {
+    /// Names of structs, enums and unions.
+    Tags,
+    /// Function names, typedefs, enum values, etc.
+    Other
+}
+
 #[derive(Debug)]
 pub struct Header {
     pub file: PathBuf,
