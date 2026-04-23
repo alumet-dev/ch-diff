@@ -12,7 +12,21 @@ use crate::{
 
 #[derive(Serialize)]
 pub struct JsonHistSummaryReport {
+    /// Stable API throughout all analysed versions.
+    pub stable: Vec<String>,
+
+    /// Unstable API throughout all analysed versions.
+    pub unstable: ChangedSymbols,
+
+    /// Changes between each successive version.
     pub changes: Vec<DiffSummary>,
+}
+
+#[derive(Serialize)]
+pub struct ChangedSymbols {
+    pub breaking: Vec<String>,
+    pub dubious: Vec<String>,
+    pub compatible: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -23,9 +37,7 @@ pub struct DiffSummary {
     pub input_old: PathBuf,
     pub input_new: PathBuf,
 
-    pub breaking_changes: Vec<String>,
-    pub dubious_changes: Vec<String>,
-    pub compatible_changes: Vec<String>,
+    pub changed: ChangedSymbols,
 }
 
 pub struct JsonHistPrinter {
@@ -45,42 +57,66 @@ impl JsonHistPrinter {
 }
 
 fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow::Result<()> {
-    let mut report = JsonHistSummaryReport {
-        changes: Vec::with_capacity(changes.changed_by_version.len()),
-    };
-
-    let paths = &changes.inputs;
-
-    for (version, changes) in changes.changed_by_version.iter() {
-        let mut changes_by_compat: FxHashMap<Compatibility, Vec<String>> = changes
-            .iter()
-            .into_group_map_by(|(_name, diff)| diff.semantic.compat())
+    fn changes_by_compat<'a>(
+        changes: impl Iterator<Item = (&'a String, Compatibility)>,
+    ) -> FxHashMap<Compatibility, Vec<String>> {
+        changes
+            .into_group_map_by(|(_name, compat)| *compat)
             .into_iter()
             .map(|(compat, changes)| {
                 (
                     compat,
                     changes
                         .into_iter()
-                        .map(|(name, _diff)| name.to_owned())
+                        .map(|(name, _compat)| name.to_owned())
                         .collect_vec(),
                 )
             })
-            .collect();
+            .collect()
+    }
 
+    let mut unstable_by_compat =
+        changes_by_compat(changes.changed.iter().map(|(name, c)| (name, *c)));
+    let mut report = JsonHistSummaryReport {
+        stable: changes.stable.iter().cloned().collect(),
+        unstable: ChangedSymbols {
+            breaking: unstable_by_compat
+                .remove(&Compatibility::Breaking)
+                .unwrap_or_default(),
+            dubious: unstable_by_compat
+                .remove(&Compatibility::Dubious)
+                .unwrap_or_default(),
+            compatible: unstable_by_compat
+                .remove(&Compatibility::BackwardCompatible)
+                .unwrap_or_default(),
+        },
+        changes: Vec::with_capacity(changes.changed_by_version.len()),
+    };
+
+    let paths = &changes.inputs;
+
+    for (version, changes) in changes.changed_by_version.iter() {
+        let mut changes_by_compat = changes_by_compat(
+            changes
+                .iter()
+                .map(|(name, diff)| (name, diff.semantic.compat())),
+        );
         let summary = DiffSummary {
             version_old: version.old.to_string(),
             version_new: version.new.to_string(),
             input_old: paths.get(&version.old).unwrap().to_owned(),
             input_new: paths.get(&version.new).unwrap().to_owned(),
-            breaking_changes: changes_by_compat
-                .remove(&Compatibility::Breaking)
-                .unwrap_or_default(),
-            dubious_changes: changes_by_compat
-                .remove(&Compatibility::Dubious)
-                .unwrap_or_default(),
-            compatible_changes: changes_by_compat
-                .remove(&Compatibility::BackwardCompatible)
-                .unwrap_or_default(),
+            changed: ChangedSymbols {
+                breaking: changes_by_compat
+                    .remove(&Compatibility::Breaking)
+                    .unwrap_or_default(),
+                dubious: changes_by_compat
+                    .remove(&Compatibility::Dubious)
+                    .unwrap_or_default(),
+                compatible: changes_by_compat
+                    .remove(&Compatibility::BackwardCompatible)
+                    .unwrap_or_default(),
+            },
         };
         report.changes.push(summary);
     }
