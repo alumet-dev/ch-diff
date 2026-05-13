@@ -22,6 +22,20 @@ pub struct ClassifiedChanges {
     pub inputs: FxHashMap<Version, PathBuf>,
 }
 
+impl ClassifiedChanges {
+    pub fn changed_by_symbol(&self) -> FxHashMap<String, Vec<(Version, &Diff)>> {
+        let mut res: FxHashMap<String, Vec<(Version, &Diff)>> = FxHashMap::default();
+        for (version, changes) in &self.changed_by_version {
+            for (symbol, diff) in changes {
+                res.entry(symbol.to_owned())
+                    .or_default()
+                    .push((version.new.clone(), diff));
+            }
+        }
+        res
+    }
+}
+
 pub fn classify_changes_in_history(
     files: &[(PathBuf, Version)],
     clang: &Clang,

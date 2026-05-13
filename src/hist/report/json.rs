@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{collections::BTreeMap, fs::File, io::Write, path::PathBuf};
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::{
     diff::{Change, Compatibility},
-    hist::classify::ClassifiedChanges,
+    hist::{classify::ClassifiedChanges, version::Version},
 };
 
 #[derive(Serialize)]
@@ -19,7 +19,10 @@ pub struct JsonHistSummaryReport {
     pub unstable: ChangedSymbols,
 
     /// Changes between each successive version.
-    pub changes: Vec<DiffSummary>,
+    pub changes_per_version: Vec<HeaderDiffSummary>,
+
+    /// Changes for each symbol.
+    pub changes_per_symbol: BTreeMap<String, BTreeMap<Version, Compatibility>>,
 }
 
 #[derive(Serialize)]
@@ -30,7 +33,7 @@ pub struct ChangedSymbols {
 }
 
 #[derive(Serialize)]
-pub struct DiffSummary {
+pub struct HeaderDiffSummary {
     pub version_old: String,
     pub version_new: String,
 
@@ -77,6 +80,21 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
 
     let mut unstable_by_compat =
         changes_by_compat(changes.changed.iter().map(|(name, c)| (name, *c)));
+
+    let changes_per_symbol = changes
+        .changed_by_symbol()
+        .into_iter()
+        .map(|(symbol, versions)| {
+            (
+                symbol,
+                versions
+                    .into_iter()
+                    .map(|(version, diff)| (version.clone(), diff.semantic.compat()))
+                    .collect(),
+            )
+        })
+        .collect();
+
     let mut report = JsonHistSummaryReport {
         stable: changes.stable.iter().cloned().collect(),
         unstable: ChangedSymbols {
@@ -90,7 +108,8 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
                 .remove(&Compatibility::BackwardCompatible)
                 .unwrap_or_default(),
         },
-        changes: Vec::with_capacity(changes.changed_by_version.len()),
+        changes_per_version: Vec::with_capacity(changes.changed_by_version.len()),
+        changes_per_symbol,
     };
 
     let paths = &changes.inputs;
@@ -101,7 +120,7 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
                 .iter()
                 .map(|(name, diff)| (name, diff.semantic.compat())),
         );
-        let summary = DiffSummary {
+        let summary = HeaderDiffSummary {
             version_old: version.old.to_string(),
             version_new: version.new.to_string(),
             input_old: paths.get(&version.old).unwrap().to_owned(),
@@ -118,7 +137,7 @@ fn print_summary(writer: &mut impl Write, changes: &ClassifiedChanges) -> anyhow
                     .unwrap_or_default(),
             },
         };
-        report.changes.push(summary);
+        report.changes_per_version.push(summary);
     }
 
     serde_json::to_writer_pretty(writer, &report).context("json serialisation failed")?;

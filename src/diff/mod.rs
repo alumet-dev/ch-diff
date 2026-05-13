@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use crate::diff::items::{
     enums::EnumDiff, functions::FunctionDiff, opaque::OpaqueDiff, structs::StructDiff,
     unions::UnionDiff, variables::VarChange,
@@ -10,7 +12,8 @@ pub mod report;
 
 // TODO differentiate source-compatibility and abi-compatibility
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, derive_more::Display)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, derive_more::Display, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Compatibility {
     /// A breaking change, for instance a parameter has been added to a function.
     #[display("breaking change(s)")]
